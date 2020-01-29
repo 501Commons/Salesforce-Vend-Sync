@@ -1,0 +1,20 @@
+minimum_cumulusci_version: '3.5.3'
+project:
+    name: Salesforce-Vend-Sync
+    package:
+        name:  Salesforce-Vend-Sync
+        namespace: svs
+        api_version: '47.0'
+    source_format: sfdx
+
+tasks:
+    robot:
+        options:
+            suites: robot/Salesforce-Vend-Sync/tests
+            options:
+                outputdir: robot/Salesforce-Vend-Sync/results
+
+    robot_testdoc:
+        options:
+            path: robot/Salesforce-Vend-Sync/tests
+            output: robot/Salesforce-Vend-Sync/doc/Salesforce-Vend-Sync_tests.html
