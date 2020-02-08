@@ -2,49 +2,33 @@
 //  1) Debug -> Open Execute Anonymous Window
 //  2) paste code
 /*
-    Vend_Sync_DeletedResults.srSyncWebsiteDeletedResults( new List<Id> { '701R00000008JS4' });
+    Vend_Sync_Customers.srSyncWebsiteDeletedResults( new List<Id> { '701R00000008JS4' });
 */
 //  3) click Execute
 
-global class Vend_Sync_DeletedResults implements Database.Batchable<sObject>, Database.AllowsCallouts { 
+global class Vend_Sync_Customers { 
 
-    global String query;
+    @future (callout=true)
+    public static void SyncVendCustomers_Future() {
 
-    global Database.querylocator start(Database.BatchableContext BC) {
-        System.debug(LoggingLevel.DEBUG, '***** Vend_Sync_DeletedResults::start - query: ' + query);
-        return Database.getQueryLocator(query);
-    }
+        System.debug(LoggingLevel.DEBUG, '***** Vend_Sync_Customers::SyncVendCustomers');
 
-    global void execute(Database.BatchableContext info, List<sObject> scope) {
-
-        System.debug(LoggingLevel.DEBUG, '***** Vend_Sync_DeletedResults::execute - scope: ' + scope);
-
-        List<Id> campaignIds = new List<Id>();
-        for (sObject scopeRecord :scope) {
-            campaignIds.add(((Campaign)scopeRecord).Id);
+        Map<String, Vend_Customer__c> vendCustomers = new Map<String, Vend_Customer__c>();
+        for (Vend_Customer__c vendCustomer :[SELECT Id__c FROM Vend_Customer__c]) {
+            vendCustomers.put(vendCustomer.Id__c, vendCustomer);
         }
-
-		if (campaignIds.isEmpty()) {
-            String errorMessage = '***** Vend_Sync_DeletedResults::execute - No Active Campaign';
-            Vend_Sync_SharedCode.SendAdminAlert(LoggingLevel.ERROR, 'Students Rebuild', errorMessage);
-
-			return;
-        }
-
-        String campaignId = String.valueOf(campaignIds[0]);
-        this.SyncWebsiteDeletedResults(campaignId);
-    }
-
-    public void SyncWebsiteDeletedResults(String campaignId) {    
 
         Http http = new Http();
         HttpRequest request = new HttpRequest();
 
-        request.setMethod('POST');
+        request.setMethod('GET');
+        request.setHeader('Authorization', 'Bearer ' + Vend_Sync_SharedCode.GetExternalWebsiteToken());
         request.setHeader('Content-Type', 'application/json');
-        request.setBody('{"token":"' + Vend_Sync_SharedCode.GetExternalWebsiteToken() + '"}');
 
-		List<SR_Result__c> deletedResults = new List<SR_Result__c>();
+        System.debug(LoggingLevel.DEBUG, '***** Vend_Sync_Customers::SyncVendCustomers request: ' + request);
+
+		Map<String, Vend_Customer__c> updateCustomers = new Map<String, Vend_Customer__c>();
+		Map<String, Vend_Customer__c> insertCustomers = new Map<String, Vend_Customer__c>();
 
         Integer queryOffset = 0;
         Integer queryLimit = 100;
@@ -52,11 +36,9 @@ global class Vend_Sync_DeletedResults implements Database.Batchable<sObject>, Da
             queryLimit = 1;
         }
 
-        Map<String,Id> activeTeamResults = Vend_Sync_SharedCode.GetActiveTeamResults(campaignId, String.valueOf(this).substring(0,String.valueOf(this).indexOf(':')));
-
         while (true) {
             
-            String endpoint = 'https://' + Vend_Sync_SharedCode.GetExternalWebsiteSubdomain() + '.studentsrebuild.org/sync/deleted_submissions/' + campaignId + '?limit=' + String.valueOf(queryLimit) + '&offset=' + String.valueOf(queryOffset);
+            String endpoint = Vend_Sync_SharedCode.GetExternalWebsiteUrl() + 'customers?page_size=' + String.valueOf(queryLimit);
             request.setEndpoint(endpoint);
 
             // Test Method doesn't support call outs
@@ -68,7 +50,7 @@ global class Vend_Sync_DeletedResults implements Database.Batchable<sObject>, Da
 
             if (response.getStatusCode() != 200) {
 
-                Vend_Sync_SharedCode.SendAdminAlert(LoggingLevel.ERROR, 'Students Rebuild', '***** Vend_Sync_DeletedResults::execute - Exit: StatusCode != 200 for endpoint: ' + endpoint);
+                Vend_Sync_SharedCode.SendAdminAlert(LoggingLevel.ERROR, 'Vend Sync', '***** Vend_Sync_Customers::execute - Exit: StatusCode != 200 for endpoint: ' + endpoint);
                 break;
             }
 
@@ -77,51 +59,71 @@ global class Vend_Sync_DeletedResults implements Database.Batchable<sObject>, Da
                 break;
             }
 
-            List<Object> submissions = (List<Object>) results.get('submissions');
-            if (submissions == null  || submissions.size() <= 0) {
+            List<Object> customers = (List<Object>) results.get('data');
+            if (customers == null  || customers.size() <= 0) {
                 break;
             }
             
             Integer syncIndex = 1;
-            for (Object submission: submissions) {
+            for (Object customer: customers) {
                 
-                String JSONData = JSON.serialize(submission);
-                Map<String, Object> srData = (Map<String, Object>)JSON.deserializeUntyped(JSONData);
-				if (srData == null) {
-					String errorMessage = '*****Vend_Sync_DeletedResults::execute AddError: Malformed Data_JSON__c field';
-                    Vend_Sync_SharedCode.SendAdminAlert(LoggingLevel.ERROR, 'Students Rebuild', errorMessage);
+                String JSONData = JSON.serialize(customer);
+                Map<String, Object> vendCustomer = (Map<String, Object>)JSON.deserializeUntyped(JSONData);
+				if (vendCustomer == null) {
+					String errorMessage = '*****Vend_Sync_Customers::execute AddError: Malformed JSON Data';
+                    Vend_Sync_SharedCode.SendAdminAlert(LoggingLevel.ERROR, 'Vend Sync', errorMessage);
 
 					continue;
 				}
 
-                if (srData.get('id') == null) {
-                    String errorMessage = '*****Vend_Sync_DeletedResults::execute AddError: Malformed Data_JSON__c missing id field';
-                    Vend_Sync_SharedCode.SendAdminAlert(LoggingLevel.ERROR, 'Students Rebuild', errorMessage);
+                if (vendCustomer.get('id') == null) {
+                    String errorMessage = '*****Vend_Sync_Customers::execute AddError: Malformed JSON Data missing id field';
+                    Vend_Sync_SharedCode.SendAdminAlert(LoggingLevel.ERROR, 'Vend Sync', errorMessage);
 
                     continue;
                 }
-                String id = srData.get('id').toString();
+                String id = vendCustomer.get('id').toString();
 
-                if (activeTeamResults.containsKey(id)) {
-                    deletedResults.add(new SR_Result__c(
-                        Id = activeTeamResults.get(id)));
+                if (vendCustomers.containsKey(id)) {
+                    // Skip for now - need to check if need to clear the Contact_Updated__c
+                    //  Maybe just update and if calls the trigger then in the trigger clear that flag
+                    //  Make sure if no data changed that the trigger isn't call though
+                }
+                else {
+                    insertCustomers.put(id, new Vend_Customer__c(Id__c = id));
                 }
 
-                System.debug(LoggingLevel.DEBUG, '*****Vend_Sync_DeletedResults::execute - queryOffset: ' + queryOffset + ' queryLimit: ' + queryLimit + ' syncIndex: ' + syncIndex++ + ' id: ' + id);
+                System.debug(LoggingLevel.DEBUG, '*****Vend_Sync_Customers::execute - queryOffset: ' + queryOffset + ' queryLimit: ' + queryLimit + ' syncIndex: ' + syncIndex++ + ' id: ' + id);
             }
 
             // Setup queryOffset for next collection
             queryOffset += queryLimit;
+
+// DEBUG - kick out after 1 interation
+            break;
 		}
 
-        System.debug(LoggingLevel.DEBUG, '*****Vend_Sync_DeletedResults::execute delete count: ' + deletedResults.size());
-          
-		if (!deletedResults.isEmpty()) {
-			Database.DeleteResult[] results = Database.delete(deletedResults, false);
-            Vend_Sync_SharedCode.ProcessDatabaseResults(results, 'Vend_Sync_DeletedResults::execute delete');
-		}
-    }
+        System.debug(LoggingLevel.DEBUG, '*****Vend_Sync_Customers::execute update count: ' + updateCustomers.size() + ' insert count: ' + insertCustomers.size());
+		if (!updateCustomers.isEmpty()) {
 
-    global void finish(Database.BatchableContext info) {
+			Database.SaveResult[] saveResults = Database.update(updateCustomers.values(), false);
+			for (Database.SaveResult result : saveResults) {
+				if (!result.isSuccess()) {
+                    Vend_Sync_SharedCode.SendAdminAlert(LoggingLevel.ERROR, 'BSP Admin', '*****Vend_Sync_Customers::execute Update ' + result.getErrors());
+                    break;
+                }
+			}
+		}
+
+		if (!insertCustomers.isEmpty()) {  
+
+			Database.SaveResult[] saveResults = Database.insert(insertCustomers.values(), false);
+			for (Database.SaveResult result : saveResults) {
+				if (!result.isSuccess()) {
+                    Vend_Sync_SharedCode.SendAdminAlert(LoggingLevel.ERROR, 'BSP Admin', '*****Vend_Sync_Customers::execute Insert ' + result.getErrors());
+                    break;
+                }
+			}
+        }
     }
 }

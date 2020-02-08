@@ -44,7 +44,6 @@ public with sharing class Vend_Sync_SharedCodeTest {
 				true);
 		}
 
-		Vend_Sync_SharedCode.UpdateAPIUsage(1, 1);
 		Vend_Sync_SharedCode.NearSalesforceLimits(true);
 	}
 }

@@ -1,5 +1,7 @@
+
 global with sharing class Vend_Sync_SharedCode {
 
+    public static final String ADMIN_NOTIFICATION_SUBJECT = 'Vend Sync Salesforce Admin Notification';
     public static final Integer QUERYEXCEPTION_MAXRETRY = 12;
     public class InvalidParameterValueException extends Exception {}
 
@@ -21,191 +23,12 @@ global with sharing class Vend_Sync_SharedCode {
         set;
     }
 
-    public static String GetExceptionMessage(Exception e) {
-        return ' - ' + e.getTypeName() + ' Message: ' + e.getMessage() + ' Line Number: ' + e.getLineNumber() + ' Cause: ' + e.getCause() + ' Stack Trace: ' + e.getStackTraceString();
-    }
-
-    public static String GetExternalWebsiteToken() {
-
-        String strToken = '4AuuT8ZRKaNrbvtE';
-        if (Vend_Sync_SharedCode.IsSandbox) {
-            strToken = '8rl1YwWFQXqN';
-        }
-
-        return strToken;
-    }
-
-    public static String GetExternalWebsiteSubDomain() {
-
-        String strSubDomain = 'prod-api';
-        if(Vend_Sync_SharedCode.IsSandbox) {
-            strSubDomain = 'stage-api';
-        }
-
-        return strSubDomain;
-    }
-
-    public static void ProcessDatabaseResults(Database.SaveResult[] results, String messageHeader) {
-
-        for (Database.SaveResult result : results) {
-            if (!result.isSuccess()) {
-                for(Database.Error err : result.getErrors()) {
-
-                    String errorMessage = '*****' + messageHeader + ' - Error ' + err.getMessage() + ' Status Code: ' + err.getStatusCode() + ' Fields: ' + err.getFields();
-                    System.debug(LoggingLevel.ERROR, errorMessage);
-
-                    // Skip Admin Email for UNABLE_TO_LOCK_ROW because can happen for various reasons and next batch call should succeed
-                    if (err.getStatusCode() == System.StatusCode.UNABLE_TO_LOCK_ROW) {
-                        continue;
-                    }
-
-                    Vend_Sync_SharedCode.SendAdminAlert(LoggingLevel.ERROR, 'Students Rebuild', errorMessage);
-                }
-            }
-        }
-    }
-
-    public static void ProcessDatabaseResults(Database.DeleteResult[] results, String messageHeader) {
-
-        for (Database.DeleteResult result : results) {
-            if (!result.isSuccess()) {
-                for(Database.Error err : result.getErrors()) {
-
-                    String errorMessage = '*****' + messageHeader + ' - Error ' + err.getMessage() + ' Status Code: ' + err.getStatusCode() + ' Fields: ' + err.getFields();
-                    System.debug(LoggingLevel.ERROR, errorMessage);
-
-                    // Skip Admin Email for UNABLE_TO_LOCK_ROW because can happen for various reasons and next batch call should succeed
-                    if (err.getStatusCode() == System.StatusCode.UNABLE_TO_LOCK_ROW) {
-                        continue;
-                    }
-
-                    Vend_Sync_SharedCode.SendAdminAlert(LoggingLevel.ERROR, 'Students Rebuild', errorMessage);
-                }
-            }
-        }
-    }
-
-    public static Map<String, SR_Team__c> GetActiveTeams(Boolean byUniqueId, String campaignId, String messageSignature) {
-
-        List<SR_Team__c> srTeams = null;
-        Integer retriesRemaining = Vend_Sync_SharedCode.QUERYEXCEPTION_MAXRETRY;
-        while (retriesRemaining-- > 0) {
-            try {
-                srTeams = [SELECT Id, SR_External_ID__c, Unique_Id__c, Data_JSON__c FROM SR_Team__c WHERE Campaign__c = :campaignId FOR UPDATE];
-                break;
-            }
-            catch (System.QueryException ex) {
-                // Catch Timeout Exception
-                System.debug(LoggingLevel.WARN, '***** ' + messageSignature + ' exception retries remaining: ' + String.valueOf(retriesRemaining) + Vend_Sync_SharedCode.GetExceptionMessage(ex)); 
-            }
-        }
-
-        if (srTeams == null) {
-            String errorMessage = '***** ' + messageSignature + ' - unable to get Database lock on SR_Team__c';
-            Vend_Sync_SharedCode.SendAdminAlert(LoggingLevel.ERROR, 'Students Rebuild', errorMessage);
-
-            throw new InvalidParameterValueException(errorMessage);
-        }
-
-        Map<String, SR_Team__c> activeTeams = new Map<String, SR_Team__c>();
-        for (SR_Team__c team :srTeams) {
-            if (byUniqueId) {
-                activeTeams.put(team.Unique_Id__c, team);
-            }
-            else {
-                activeTeams.put(team.SR_External_ID__c, team);
-            }
-        }
-
-        return activeTeams;
-    }
-
-    public static Map<String,Id> GetActiveTeamResults(String campaignId, String messageSignature) {
-
-        List<SR_Result__c> srResults = null;
-        Integer retriesRemaining = Vend_Sync_SharedCode.QUERYEXCEPTION_MAXRETRY;
-        while (retriesRemaining-- > 0) {
-            try {
-                srResults = [SELECT Id, SR_External_ID__c FROM SR_Result__c WHERE SR_Team__r.Campaign__c = :campaignId FOR UPDATE];
-            }
-            catch (System.QueryException ex) {
-                // Catch Timeout Exception
-                System.debug(LoggingLevel.WARN, '***** Vend_Sync_Sysnc_Website_Results::execute SR_Result__c exception retries remaining: ' + String.valueOf(retriesRemaining) + Vend_Sync_SharedCode.GetExceptionMessage(ex));
-            }
-        }
-
-        if (srResults == null) {
-            String errorMessage = '***** Vend_Sync_Sysnc_Website_Results::execute - unable to get Database lock on SR_Result__c';
-            Vend_Sync_SharedCode.SendAdminAlert(LoggingLevel.ERROR, 'Students Rebuild', errorMessage);
-
-            throw new InvalidParameterValueException(errorMessage);
-        }
-
-        Map<String,Id> activeResults = new Map<String,Id>();
-        for (SR_Result__c result :srResults) {
-            activeResults.put(result.SR_External_ID__c, result.Id);
-        }
-
-        return activeResults;
-    }
-
-    public static Boolean ValidateEmail(String email) {
-        
-        Boolean res = true;
-        String emailRegex = '^[a-zA-Z0-9._|\\\\%#~`=?&/$^*!}{+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,4}$'; // source: <a href="http://www.regular-expressions.info/email.html" target="_blank" rel="nofollow">http://www.regular-expressions.info/email.html</a>
-        Pattern MyPattern = Pattern.compile(emailRegex);
-        Matcher MyMatcher = MyPattern.matcher(email);
-    
-        if (!MyMatcher.matches()) 
-            res = false;
-        return res; 
-    }
-    
-    public static String CleanString(String stringValue, Boolean toLowerCase) {
-        if (String.isBlank(stringValue)) {
-            return stringValue;
-        }
-
-        if (toLowerCase) { 
-            stringValue = stringValue.toLowerCase();
-        }
-
-        return stringValue.trim();
-    }
-
-    public static String CleanEmailString(String stringValue, Boolean toLowerCase) {
-        if (String.isBlank(stringValue)) {
-            return stringValue;
-        }
-
-        stringValue = CleanString(stringValue, toLowerCase);
-
-        //if (!ValidateEmail(stringValue)) {
-
-            stringValue = stringValue.replace('..', '.');
-
-            if (stringValue.endsWith('.comm')) {
-                stringValue = stringValue.replace('.comm', '.com');
-            }
-
-            if (stringValue.endsWith('.orgg')) {
-                stringValue = stringValue.replace('.orgg', '.org');
-            }
-        //}
-
-        // Remove spaces
-        stringValue = stringValue.replaceAll(' ', '');
-
-
-        return stringValue;
-    }
-
     public static void SendAdminAlert(LoggingLevel logLevel, String adminType, String message){
 
         // Output Debugger
 		System.debug(logLevel, message);
 
-        List<EmailMessage> adminEmailMessages = [SELECT CreatedDate FROM EmailMessage WHERE Subject = 'Bezos Family Foundation Salesforce Admin Notification' ORDER BY CreatedDate DESC LIMIT 1];
+        List<EmailMessage> adminEmailMessages = [SELECT CreatedDate FROM EmailMessage WHERE Subject = :ADMIN_NOTIFICATION_SUBJECT ORDER BY CreatedDate DESC LIMIT 1];
         if (!adminEmailMessages.isEmpty()) {
 
             // Check to only send up to 1 per day interval
@@ -216,7 +39,7 @@ global with sharing class Vend_Sync_SharedCode {
         }
 
         EmailMessage adminEmail = new EmailMessage(
-            Subject = 'Bezos Family Foundation Salesforce Admin Notification',
+            Subject = Vend_Sync_SharedCode.ADMIN_NOTIFICATION_SUBJECT,
             Status = '3'
         );
         Database.insert(adminEmail, false);
@@ -232,8 +55,12 @@ global with sharing class Vend_Sync_SharedCode {
             return;
         }
 
+        String orgEmail = 'sfconsulting@501commons.org';
+
         List<OrgWideEmailAddress> orgEmails = [select id, DisplayName, Address from OrgWideEmailAddress where DisplayName = :adminType];
-        String orgEmail = orgEmails[0].Address;
+        if (orgEmails.isEmpty()) {
+            orgEmail = orgEmails[0].Address;
+        }
         
         try {
             Messaging.SingleEmailMessage adminMail = Vend_Sync_SharedCode.BuildAdminEmail(null, null, orgEmail, null, null, message, Vend_Sync_SharedCode.isSandbox);
@@ -278,9 +105,7 @@ global with sharing class Vend_Sync_SharedCode {
                 // Check to override email unless allowed domain
                 if (Vend_Sync_SharedCode.IsSandbox) {
                     for (String emailAddress :emailMessage.getToAddresses()) {
-                        if (!emailAddress.toLowerCase().contains('bezosfamilyfoundation.org') &&
-                            !emailAddress.toLowerCase().contains('fuzzco.com') &&
-                            !emailAddress.toLowerCase().contains('501commons.org')) {
+                        if (!emailAddress.toLowerCase().contains('501commons.org')) {
 
                             Messaging.SingleEmailMessage adminMail = Vend_Sync_SharedCode.BuildAdminEmail(null, emailAddress, adminEmail, emailTemplate, messageData, 'WARNING: Email to ' + emailAddress + ' disabled in Sandbox.', Vend_Sync_SharedCode.isSandbox);
                             if (adminMail != null) {
@@ -385,6 +210,166 @@ global with sharing class Vend_Sync_SharedCode {
         return true;
     }
 
+    public static Messaging.SingleEmailMessage BuildAdminEmail(Id contactId, String email, String adminEmail, String emailTemplate, String messageData, String errorMessage, Boolean isSandbox) {
+
+        Messaging.SingleEmailMessage mail = new Messaging.SingleEmailMessage();
+
+        // Set common parameters
+        mail.setUseSignature(false);
+        mail.setBccSender(false);
+
+        List<String> emails = new List<string>{ adminEmail <> null ? adminEmail : '' };
+
+        // Debugging - clear out list to limit emails when debugging
+//        if (Vend_Sync_SharedCode.IsSandbox) {
+//            emails.clear();
+//        }
+
+        // Add 501 Commons BFF Email
+        if (!emails.contains('db.bff@501commons.org')) {
+            emails.add('db.bff@501commons.org');
+        }
+
+        mail.setToAddresses(emails);
+
+        mail.setSubject(Vend_Sync_SharedCode.ADMIN_NOTIFICATION_SUBJECT);
+
+        String expandedMessage = Vend_Sync_SharedCode.ExpandMessage(errorMessage);
+
+        mail.setPlainTextBody(
+            (String.isBlank(expandedMessage) ? '' : expandedMessage + '\n\n') +
+            (String.isBlank(contactId) ? '' : 'ContactId: ' + contactId + '\n\n') + 
+            (String.isBlank(email) ? '' : 'Email: ' + email + '\n\n') + 
+            (String.isBlank(emailTemplate) ? '' : 'Template: ' + emailTemplate + '\n\n') + 
+            (String.isBlank(messageData) ? '' : 'Message Data: ' + messageData + '\n\n') +
+            (String.isBlank(errorMessage) ? '' : 'Error Message: ' + errorMessage));
+
+        mail.setHtmlBody(
+            (String.isBlank(expandedMessage) ? '' : expandedMessage + '<br/><br/>') + 
+            (String.isBlank(contactId) ? '' : 'ContactId: ' + contactId + '<br/><br/>') + 
+            (String.isBlank(email) ? '' : 'Email: ' + email + '<br/><br/>') + 
+            (String.isBlank(emailTemplate) ? '' : 'Template: ' + emailTemplate + '<br/><br/>') + 
+            (String.isBlank(messageData) ? '' : 'Message Data:<b> ' + messageData + ' </b><p><br/><br/>') +
+            (String.isBlank(errorMessage) ? '' : 'Error Message: ' + errorMessage)); 
+
+        return mail;
+    }
+
+    public static String GetExceptionMessage(Exception e) {
+        return ' - ' + e.getTypeName() + ' Message: ' + e.getMessage() + ' Line Number: ' + e.getLineNumber() + ' Cause: ' + e.getCause() + ' Stack Trace: ' + e.getStackTraceString();
+    }
+
+    public static String GetExternalWebsiteToken() {
+
+        String strToken = '6jALrAHFYJ3XEgnSwLx6lw_TMtppPV8xJXoq3u7s';
+        if (Vend_Sync_SharedCode.IsSandbox) {
+            strToken = '6jALrAHFYJ3XEgnSwLx6lw_TMtppPV8xJXoq3u7s';
+        }
+
+        return strToken;
+    }
+
+    public static String GetExternalWebsiteUrl() {
+
+        String strSubDomain = 'https://bimuseumofart.vendhq.com/api/2.0/';
+        if(Vend_Sync_SharedCode.IsSandbox) {
+            strSubDomain = 'https://bimuseumofart.vendhq.com/api/2.0/';
+        }
+
+        return strSubDomain;
+    }
+
+    public static void ProcessDatabaseResults(Database.SaveResult[] results, String messageHeader) {
+
+        for (Database.SaveResult result : results) {
+            if (!result.isSuccess()) {
+                for(Database.Error err : result.getErrors()) {
+
+                    String errorMessage = '*****' + messageHeader + ' - Error ' + err.getMessage() + ' Status Code: ' + err.getStatusCode() + ' Fields: ' + err.getFields();
+                    System.debug(LoggingLevel.ERROR, errorMessage);
+
+                    // Skip Admin Email for UNABLE_TO_LOCK_ROW because can happen for various reasons and next batch call should succeed
+                    if (err.getStatusCode() == System.StatusCode.UNABLE_TO_LOCK_ROW) {
+                        continue;
+                    }
+
+                    Vend_Sync_SharedCode.SendAdminAlert(LoggingLevel.ERROR, 'Vend Sync', errorMessage);
+                }
+            }
+        }
+    }
+
+    public static void ProcessDatabaseResults(Database.DeleteResult[] results, String messageHeader) {
+
+        for (Database.DeleteResult result : results) {
+            if (!result.isSuccess()) {
+                for(Database.Error err : result.getErrors()) {
+
+                    String errorMessage = '*****' + messageHeader + ' - Error ' + err.getMessage() + ' Status Code: ' + err.getStatusCode() + ' Fields: ' + err.getFields();
+                    System.debug(LoggingLevel.ERROR, errorMessage);
+
+                    // Skip Admin Email for UNABLE_TO_LOCK_ROW because can happen for various reasons and next batch call should succeed
+                    if (err.getStatusCode() == System.StatusCode.UNABLE_TO_LOCK_ROW) {
+                        continue;
+                    }
+
+                    Vend_Sync_SharedCode.SendAdminAlert(LoggingLevel.ERROR, 'Vend Sync', errorMessage);
+                }
+            }
+        }
+    }
+
+    public static Boolean ValidateEmail(String email) {
+        
+        Boolean res = true;
+        String emailRegex = '^[a-zA-Z0-9._|\\\\%#~`=?&/$^*!}{+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,4}$'; // source: <a href="http://www.regular-expressions.info/email.html" target="_blank" rel="nofollow">http://www.regular-expressions.info/email.html</a>
+        Pattern MyPattern = Pattern.compile(emailRegex);
+        Matcher MyMatcher = MyPattern.matcher(email);
+    
+        if (!MyMatcher.matches()) 
+            res = false;
+        return res; 
+    }
+    
+    public static String CleanString(String stringValue, Boolean toLowerCase) {
+        if (String.isBlank(stringValue)) {
+            return stringValue;
+        }
+
+        if (toLowerCase) { 
+            stringValue = stringValue.toLowerCase();
+        }
+
+        return stringValue.trim();
+    }
+
+    public static String CleanEmailString(String stringValue, Boolean toLowerCase) {
+        if (String.isBlank(stringValue)) {
+            return stringValue;
+        }
+
+        stringValue = CleanString(stringValue, toLowerCase);
+
+        //if (!ValidateEmail(stringValue)) {
+
+            stringValue = stringValue.replace('..', '.');
+
+            if (stringValue.endsWith('.comm')) {
+                stringValue = stringValue.replace('.comm', '.com');
+            }
+
+            if (stringValue.endsWith('.orgg')) {
+                stringValue = stringValue.replace('.orgg', '.org');
+            }
+        //}
+
+        // Remove spaces
+        stringValue = stringValue.replaceAll(' ', '');
+
+
+        return stringValue;
+    }
+
     public static Messaging.SingleEmailMessage BuildContactEmail(Id emailTemplateId, Id contactId, Id relatedId, String email, List<OrgWideEmailAddress> orgEmails) {
 
         if (!ValidateEmail(email)) {
@@ -477,51 +462,6 @@ global with sharing class Vend_Sync_SharedCode {
        return mail;
 	}
 
-    public static Messaging.SingleEmailMessage BuildAdminEmail(Id contactId, String email, String adminEmail, String emailTemplate, String messageData, String errorMessage, Boolean isSandbox) {
-
-        Messaging.SingleEmailMessage mail = new Messaging.SingleEmailMessage();
-
-        // Set common parameters
-        mail.setUseSignature(false);
-        mail.setBccSender(false);
-
-        List<String> emails = new List<string>{ adminEmail <> null ? adminEmail : '' };
-
-        // Debugging - clear out list to limit emails when debugging
-//        if (Vend_Sync_SharedCode.IsSandbox) {
-//            emails.clear();
-//        }
-
-        // Add 501 Commons BFF Email
-        if (!emails.contains('db.bff@501commons.org')) {
-            emails.add('db.bff@501commons.org');
-        }
-
-        mail.setToAddresses(emails);
-
-        mail.setSubject('Bezos Family Foundation Salesforce Admin Notification');
-
-        String expandedMessage = Vend_Sync_SharedCode.ExpandMessage(errorMessage);
-
-        mail.setPlainTextBody(
-            (String.isBlank(expandedMessage) ? '' : expandedMessage + '\n\n') +
-            (String.isBlank(contactId) ? '' : 'ContactId: ' + contactId + '\n\n') + 
-            (String.isBlank(email) ? '' : 'Email: ' + email + '\n\n') + 
-            (String.isBlank(emailTemplate) ? '' : 'Template: ' + emailTemplate + '\n\n') + 
-            (String.isBlank(messageData) ? '' : 'Message Data: ' + messageData + '\n\n') +
-            (String.isBlank(errorMessage) ? '' : 'Error Message: ' + errorMessage));
-
-        mail.setHtmlBody(
-            (String.isBlank(expandedMessage) ? '' : expandedMessage + '<br/><br/>') + 
-            (String.isBlank(contactId) ? '' : 'ContactId: ' + contactId + '<br/><br/>') + 
-            (String.isBlank(email) ? '' : 'Email: ' + email + '<br/><br/>') + 
-            (String.isBlank(emailTemplate) ? '' : 'Template: ' + emailTemplate + '<br/><br/>') + 
-            (String.isBlank(messageData) ? '' : 'Message Data:<b> ' + messageData + ' </b><p><br/><br/>') +
-            (String.isBlank(errorMessage) ? '' : 'Error Message: ' + errorMessage)); 
-
-        return mail;
-    }
-
     private static String ExpandMessage(String message) {
 
         if (String.isBlank(message)) {
@@ -594,31 +534,6 @@ global with sharing class Vend_Sync_SharedCode {
 
         return nearLimit;
     }
-
-	public static void UpdateAPIUsage(Integer writeCount, Integer readCount) {
-
-		// Update API Tracking
-		list<API_Usage__c> apiUsageList = [select Id, Write_Count__c from API_Usage__c WHERE Service__c = 'Students Rebuild' AND Date_Usage__c = :date.today()];
-		if (apiUsageList.isEmpty()) {
-			API_Usage__c apiUsage = new API_Usage__c(Date_Usage__c = date.today(), Write_Count__c = writeCount, Read_Count__c = readCount, Service__c = 'Students Rebuild');
-			insert apiUsage;
-		}
-		else {
-			if (apiUsageList[0].Write_Count__c == null) {
-                apiUsageList[0].Write_Count__c = writeCount;
-            }
-            else {
-                apiUsageList[0].Write_Count__c += writeCount;
-            }
-			if (apiUsageList[0].Read_Count__c == null) {
-                apiUsageList[0].Read_Count__c = readCount;
-            }
-            else {
-                apiUsageList[0].Read_Count__c += readCount;
-            }
-			update apiUsageList[0];
-		}
-	}
 
     public static void CodeCoverageHack() {
 

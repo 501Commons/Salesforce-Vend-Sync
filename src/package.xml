@@ -1,17 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Package xmlns="http://soap.sforce.com/2006/04/metadata">
     <types>
-        <members>Vend_Sync_Batch_Email</members>
-        <members>Vend_Sync_REST</members>
-        <members>Vend_Sync_RESTTest</members>
         <members>Vend_Sync_SharedCode</members>
         <members>Vend_Sync_SharedCodeTest</members>
         <members>Vend_Sync_Batch</members>
-        <members>Vend_Sync_Config</members>
-        <members>Vend_Sync_DeletedResults</members>
-        <members>Vend_Sync_DeletedTeams</members>
-        <members>Vend_Sync_Results</members>
-        <members>Vend_Sync_Teams</members>
+        <members>Vend_Sync_Customers</members>
+        <members>Vend_Sync_Sales</members>
+        <members>Vend_Sync_Products</members>
         <members>Vend_Sync_TriggerHelper</members>
         <members>Vend_Sync_TriggerHelperTest</members>
         <name>ApexClass</name>
