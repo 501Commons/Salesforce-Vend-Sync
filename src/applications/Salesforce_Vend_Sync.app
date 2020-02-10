@@ -4,7 +4,6 @@
     <description>Salesforce VEND Sync.</description>
     <formFactors>Large</formFactors>
     <label>VEND Sync</label>
-    <logo></logo>
     <tabs>standard-report</tabs>
     <tabs>standard-Dashboard</tabs>
 </CustomApplication>

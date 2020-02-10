@@ -59,24 +59,8 @@ public with sharing class Vend_Sync_Batch {
     @InvocableMethod(label='Vend Sync' description='Vend Sync data from Vend REST API into Salesforce.')
     public static void vendSyncBatch() {
 
-      // Mass Action is calling this REST method and this REST method wants to call a Webservice which is not allowed by Salesforce.  Apex will throw a System.CalloutException
-      //  Links about System.CalloutException    
-      //      https://help.salesforce.com/articleView?id=000340086&type=1&mode=1
-      //      https://help.salesforce.com/articleView?id=000331332&type=1&mode=1&language=en_US
-      //      
-      // Workaround 1: is to Batch or Schedule the Apex that will do the callout to the webservice
-      // Workaround 2: Async schedule the Batch - look at the SMS Flow project where Flow calls in on Async - this is allowed from Mass Action -> Flow -> Async APEX
-
-/*
-      Vend_Sync_Products batchRequestSyncProducts = new Vend_Sync_Products();
-      batchRequestSyncProducts.query = 'SELECT Id FROM Vend_Product__c';
-      Database.executeBatch(batchRequestSyncProducts);
-
-      Vend_Sync_Sales batchRequestSyncSales = new Vend_Sync_Sales();
-      batchRequestSyncSales.query = 'SELECT Id FROM Vend_Sale__c';
-      Database.executeBatch(batchRequestSyncSales);
-*/
-
-      Vend_Sync_Customers.SyncVendCustomers_Future();
+      Vend_Sync_Object.SyncVendObject_Future(Vend_Sync_Object.VendApiTypes.customers.name());
+      Vend_Sync_Object.SyncVendObject_Future(Vend_Sync_Object.VendApiTypes.products.name());
+      Vend_Sync_Object.SyncVendObject_Future(Vend_Sync_Object.VendApiTypes.sales.name());
     }
 }

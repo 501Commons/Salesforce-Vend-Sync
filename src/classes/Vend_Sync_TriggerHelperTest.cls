@@ -15,7 +15,7 @@ public with sharing class Vend_Sync_TriggerHelperTest {
 //		syncProducts.SyncVendCustomers();
 		Vend_Sync_Sales syncSales = new Vend_Sync_Sales();
 //		syncSales.SyncVendCustomers();
-		Vend_Sync_Customers syncCustomers = new Vend_Sync_Customers();
+		Vend_Sync_Object syncCustomers = new Vend_Sync_Object();
 //		syncCustomers.SyncVendCustomers();
 	}
 

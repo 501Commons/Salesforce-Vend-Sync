@@ -2,6 +2,7 @@
 global with sharing class Vend_Sync_SharedCode {
 
     public static final String ADMIN_NOTIFICATION_SUBJECT = 'Vend Sync Salesforce Admin Notification';
+    public static final String ADMIN_TYPE = 'Salesforce Admin';
     public static final Integer QUERYEXCEPTION_MAXRETRY = 12;
     public class InvalidParameterValueException extends Exception {}
 
