@@ -154,6 +154,7 @@ global class Vend_Sync_Object {
 
                         if (vendProducts.containsKey(id)) {
                             // TBD - Add check to see if data changed then set the data change flag
+                            //      Will need to update HandleObjectData to compare data so will need to build a query first so vendProducts has the data to compare against or can just use the trigger
                             vendProduct.Id = vendProducts.get(id).Id;
                             updateProducts.put(id, (Vend_Product__c)vendProduct);
                         }
