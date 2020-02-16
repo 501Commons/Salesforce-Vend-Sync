@@ -5,8 +5,6 @@
         <members>Vend_Sync_Object</members>
         <members>Vend_Sync_SharedCode</members>
         <members>Vend_Sync_SharedCodeTest</members>
-        <members>Vend_Sync_TriggerHelper</members>
-        <members>Vend_Sync_TriggerHelperTest</members>
         <name>ApexClass</name>
     </types>
     <types>
@@ -14,16 +12,30 @@
         <name>CustomApplication</name>
     </types>
     <types>
+        <members>Vend_Customer__c.Record_Reconciled__c</members>
         <members>Vend_Customer__c.id__c</members>
+        <members>Vend_Customer__c.updated_at__c</members>
+        <members>Vend_Product__c.Record_Reconciled__c</members>
         <members>Vend_Product__c.id__c</members>
+        <members>Vend_Product__c.updated_at__c</members>
+        <members>Vend_Sale_Line_Item__c.Vend_Sale__c</members>
+        <members>Vend_Sale_Line_Item__c.id__c</members>
+        <members>Vend_Sale_Line_Item__c.sequence__c</members>
+        <members>Vend_Sale__c.Record_Reconciled__c</members>
         <members>Vend_Sale__c.id__c</members>
+        <members>Vend_Sale__c.updated_at__c</members>
         <name>CustomField</name>
     </types>
     <types>
         <members>Vend_Customer__c</members>
         <members>Vend_Product__c</members>
+        <members>Vend_Sale_Line_Item__c</members>
         <members>Vend_Sale__c</members>
         <name>CustomObject</name>
+    </types>
+    <types>
+        <members>Vend_Sync</members>
+        <name>PermissionSet</name>
     </types>
     <version>42.0</version>
 </Package>

@@ -1,4 +1,3 @@
-
 global with sharing class Vend_Sync_SharedCode {
 
     public static final String ADMIN_NOTIFICATION_SUBJECT = 'Vend Sync Salesforce Admin Notification';
@@ -22,6 +21,17 @@ global with sharing class Vend_Sync_SharedCode {
         }
 
         set;
+    }
+
+    public static Datetime CleanVendJsonDateTime(String vendJsonDatetime) {
+
+        if (String.isBlank(vendJsonDatetime)) {
+            return Datetime.valueOf(vendJsonDatetime);
+        }
+
+        // vendJsonDatetime format: 2014-06-27T22:59:56+00:00
+        // Salesforce expected format: yyyy-MM-dd HH:mm:ss
+        return Datetime.valueOf(vendJsonDatetime.replace('T', ' ').removeEnd('+00:00'));
     }
 
     public static void SendAdminAlert(LoggingLevel logLevel, String adminType, String message){
@@ -59,7 +69,7 @@ global with sharing class Vend_Sync_SharedCode {
         String orgEmail = 'sfconsulting@501commons.org';
 
         List<OrgWideEmailAddress> orgEmails = [select id, DisplayName, Address from OrgWideEmailAddress where DisplayName = :adminType];
-        if (orgEmails.isEmpty()) {
+        if (!orgEmails.isEmpty()) {
             orgEmail = orgEmails[0].Address;
         }
         
@@ -294,7 +304,7 @@ global with sharing class Vend_Sync_SharedCode {
                         continue;
                     }
 
-                    Vend_Sync_SharedCode.SendAdminAlert(LoggingLevel.ERROR, 'Vend Sync', errorMessage);
+                    Vend_Sync_SharedCode.SendAdminAlert(LoggingLevel.ERROR, Vend_Sync_SharedCode.ADMIN_TYPE, errorMessage);
                 }
             }
         }
@@ -314,7 +324,7 @@ global with sharing class Vend_Sync_SharedCode {
                         continue;
                     }
 
-                    Vend_Sync_SharedCode.SendAdminAlert(LoggingLevel.ERROR, 'Vend Sync', errorMessage);
+                    Vend_Sync_SharedCode.SendAdminAlert(LoggingLevel.ERROR, Vend_Sync_SharedCode.ADMIN_TYPE, errorMessage);
                 }
             }
         }

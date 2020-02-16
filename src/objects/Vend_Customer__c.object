@@ -50,7 +50,7 @@
     <enableFeeds>false</enableFeeds>
     <enableHistory>false</enableHistory>
     <enableReports>true</enableReports>
-    <enableSearch>false</enableSearch>
+    <enableSearch>true</enableSearch>
     <enableSharing>true</enableSharing>
     <enableStreamingApi>true</enableStreamingApi>
     <fields>
@@ -59,6 +59,16 @@
         <description>Checked means that the record has been processed and the Salesforce Contact created or updated.</description>
         <externalId>false</externalId>
         <label>Contact Updated</label>
+        <trackTrending>false</trackTrending>
+        <type>Checkbox</type>
+    </fields>
+    <fields>
+        <fullName>Record_Reconciled__c</fullName>
+        <defaultValue>false</defaultValue>
+        <description>Vend record reconciled with any related Salesforce records</description>
+        <externalId>false</externalId>
+        <inlineHelpText>Vend record reconciled with any related Salesforce records</inlineHelpText>
+        <label>Record Reconciled</label>
         <trackTrending>false</trackTrending>
         <type>Checkbox</type>
     </fields>
@@ -98,7 +108,7 @@
         <caseSensitive>false</caseSensitive>
         <description>Holds the Customer ID that comes from Vend.</description>
         <externalId>true</externalId>
-        <label>Vend Id</label>
+        <label>Vend Customer Id</label>
         <length>36</length>
         <required>true</required>
         <trackTrending>false</trackTrending>
@@ -115,7 +125,26 @@
         <type>Text</type>
         <unique>false</unique>
     </fields>
+    <fields>
+        <fullName>updated_at__c</fullName>
+        <externalId>false</externalId>
+        <label>Updated At</label>
+        <required>false</required>
+        <trackTrending>false</trackTrending>
+        <type>DateTime</type>
+    </fields>
     <label>Vend Customer</label>
+    <listViews>
+        <fullName>All</fullName>
+        <columns>NAME</columns>
+        <columns>first_name__c</columns>
+        <columns>last_name__c</columns>
+        <columns>id__c</columns>
+        <columns>customer_code__c</columns>
+        <columns>Contact_Updated__c</columns>
+        <filterScope>Everything</filterScope>
+        <label>All</label>
+    </listViews>
     <nameField>
         <displayFormat>VC-{00000}</displayFormat>
         <label>Vend Customer Name</label>

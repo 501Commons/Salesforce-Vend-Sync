@@ -1,12 +1,12 @@
 // Run Code FROM Developer Console
-//  1) Debug -> Open Execute Anonymous Window
+//  1) Debug -> Open SyncVendObject_Future Anonymous Window
 //  2) paste code
 /*
-    Vend_Sync_Object.SyncVendObject_Future('vendObjects');
+    Vend_Sync_Object.SyncVendObject_Future('customers');
     Vend_Sync_Object.SyncVendObject_Future('products');
-    Vend_Sync_Object.SyncVendObject_Future('products');
+    Vend_Sync_Object.SyncVendObject_Future('sales');
 */
-//  3) click Execute
+//  3) click SyncVendObject_Future
 
 global class Vend_Sync_Object { 
 
@@ -44,18 +44,18 @@ global class Vend_Sync_Object {
 
         switch on vendApiType {
             when customers {
-                for (Vend_Customer__c customer :[SELECT Id__c FROM Vend_Customer__c]) {
-                    vendCustomers.put(customer.Id__c, customer);
+                for (Vend_Customer__c customer :[SELECT id__c, updated_at__c FROM Vend_Customer__c]) {
+                    vendCustomers.put(customer.id__c, customer);
                 }
             }
             when products {
-                for (Vend_Product__c product :[SELECT Id__c FROM Vend_Product__c]) {
-                    vendProducts.put(product.Id__c, product);
+                for (Vend_Product__c product :[SELECT id__c, updated_at__c FROM Vend_Product__c]) {
+                    vendProducts.put(product.id__c, product);
                 }
             }
             when sales {
-                for (Vend_Sale__c sale :[SELECT Id__c FROM Vend_Sale__c]) {
-                    vendSales.put(sale.Id__c, sale);
+                for (Vend_Sale__c sale :[SELECT id__c, updated_at__c FROM Vend_Sale__c]) {
+                    vendSales.put(sale.id__c, sale);
                 }
             }
         }
@@ -78,10 +78,12 @@ global class Vend_Sync_Object {
 		Map<String, Vend_Sale__c> updateSales = new Map<String, Vend_Sale__c>();
 		Map<String, Vend_Sale__c> insertSales = new Map<String, Vend_Sale__c>();
 
+        Map<String, List<Object>> vendSaleLineItems = new Map<String, List<Object>>();
+
         Integer queryOffset = 0;
         Integer queryLimit = 100;
         if (Vend_Sync_SharedCode.IsSandbox) {
-            queryLimit = 1;
+            queryLimit = 5;
         }
 
         while (true) {
@@ -98,7 +100,7 @@ global class Vend_Sync_Object {
 
             if (response.getStatusCode() != 200) {
 
-                Vend_Sync_SharedCode.SendAdminAlert(LoggingLevel.ERROR, 'Vend Sync', '***** Vend_Sync_Object::execute - Exit: StatusCode != 200 for endpoint: ' + endpoint);
+                Vend_Sync_SharedCode.SendAdminAlert(LoggingLevel.ERROR, Vend_Sync_SharedCode.ADMIN_TYPE, '***** Vend_Sync_Object::SyncVendObject_Future - Exit: StatusCode != 200 for endpoint: ' + endpoint);
                 break;
             }
 
@@ -118,67 +120,120 @@ global class Vend_Sync_Object {
                 String JSONData = JSON.serialize(vendObject);
                 Map<String, Object> vendObjectMap = (Map<String, Object>)JSON.deserializeUntyped(JSONData);
 				if (vendObjectMap == null) {
-					String errorMessage = '*****Vend_Sync_Object::execute AddError: Malformed JSON Data';
-                    Vend_Sync_SharedCode.SendAdminAlert(LoggingLevel.ERROR, 'Vend Sync', errorMessage);
+					String errorMessage = '*****Vend_Sync_Object::SyncVendObject_Future AddError: Malformed JSON Data';
+                    Vend_Sync_SharedCode.SendAdminAlert(LoggingLevel.ERROR, Vend_Sync_SharedCode.ADMIN_TYPE, errorMessage);
 
 					continue;
 				}
 
+                // Check for required fields
+                //
+
+                // Check for id
                 if (vendObjectMap.get('id') == null) {
-                    String errorMessage = '*****Vend_Sync_Object::execute AddError: Malformed JSON Data missing id field';
-                    Vend_Sync_SharedCode.SendAdminAlert(LoggingLevel.ERROR, 'Vend Sync', errorMessage);
+                    String errorMessage = '*****Vend_Sync_Object::SyncVendObject_Future AddError: Malformed JSON Data missing id field';
+                    Vend_Sync_SharedCode.SendAdminAlert(LoggingLevel.ERROR, Vend_Sync_SharedCode.ADMIN_TYPE, errorMessage);
 
                     continue;
                 }
-                String id = vendObjectMap.get('id').toString();
+                String vend_id = String.valueOf(vendObjectMap.get('id'));
+
+                // Check for updated_at
+                if (vendObjectMap.get('updated_at') == null) {
+                    String errorMessage = '*****Vend_Sync_Object::SyncVendObject_Future AddError: Malformed JSON Data missing updated_at field';
+                    Vend_Sync_SharedCode.SendAdminAlert(LoggingLevel.ERROR, Vend_Sync_SharedCode.ADMIN_TYPE, errorMessage);
+
+                    continue;
+                }
+                DateTime vend_updated_at = Datetime.valueOf(Vend_Sync_SharedCode.CleanVendJsonDateTime(String.valueOf(vendObjectMap.get('updated_at'))));
 
                 switch on vendApiType {
                     when customers {
 
-                        Vend_Customer__c vendCustomer = new Vend_Customer__c(Id__c = id);
-                        Vend_Sync_Object.HandleObjectData((SObject)vendCustomer, vendObjectMap, Schema.SObjectType.Vend_Customer__c.fields.getMap());
+                        if (vendCustomers.containsKey(vend_id)) {
+                            
+                            if (vendCustomers.get(vend_id).updated_at__c <> vend_updated_at) {
 
-                        if (vendCustomers.containsKey(id)) {
-                            // TBD - Add check to see if data changed then set the data change flag
-                            vendCustomer.Id = vendCustomers.get(id).Id;
-                            updateCustomers.put(id, (Vend_Customer__c)vendCustomer);
+                                Vend_Customer__c vendCustomer = new Vend_Customer__c(id__c = vend_id, updated_at__c = vend_updated_at);
+                                Vend_Sync_Object.HandleObjectData((SObject)vendCustomer, vendObjectMap, Schema.SObjectType.Vend_Customer__c.fields.getMap());
+        
+                                vendCustomer.Id = vendCustomers.get(vend_id).Id;
+
+                                // Field to signal the record has been changed
+                                vendCustomer.Record_Reconciled__c = false;
+
+                                updateCustomers.put(vend_id, vendCustomer);
+                            }
                         }
                         else {
-                            insertCustomers.put(id, (Vend_Customer__c)vendCustomer);
+                            Vend_Customer__c vendCustomer = new Vend_Customer__c(id__c = vend_id, updated_at__c = vend_updated_at);
+                            Vend_Sync_Object.HandleObjectData((SObject)vendCustomer, vendObjectMap, Schema.SObjectType.Vend_Customer__c.fields.getMap());
+
+                            insertCustomers.put(vend_id, vendCustomer);
                         }
                     }
                     when products {
 
-                        Vend_Product__c vendProduct = new Vend_Product__c(Id__c = id);
-                        Vend_Sync_Object.HandleObjectData((SObject)vendProduct, vendObjectMap, Schema.SObjectType.Vend_Product__c.fields.getMap());
+                        if (vendProducts.containsKey(vend_id)) {
 
-                        if (vendProducts.containsKey(id)) {
-                            // TBD - Add check to see if data changed then set the data change flag
-                            //      Will need to update HandleObjectData to compare data so will need to build a query first so vendProducts has the data to compare against or can just use the trigger
-                            vendProduct.Id = vendProducts.get(id).Id;
-                            updateProducts.put(id, (Vend_Product__c)vendProduct);
+                            if (vendProducts.get(vend_id).updated_at__c <> vend_updated_at) {
+
+                                Vend_Product__c vendProduct = new Vend_Product__c(id__c = vend_id);
+                                Vend_Sync_Object.HandleObjectData((SObject)vendProduct, vendObjectMap, Schema.SObjectType.Vend_Product__c.fields.getMap());
+        
+                                vendProduct.Id = vendProducts.get(vend_id).Id;
+
+                                // Field to signal the record has been changed
+                                vendProduct.Record_Reconciled__c = false;
+
+                                updateProducts.put(vend_id, vendProduct);
+                            }
                         }
                         else {
-                            insertProducts.put(id, (Vend_Product__c)vendProduct);
+                            Vend_Product__c vendProduct = new Vend_Product__c(id__c = vend_id);
+                            Vend_Sync_Object.HandleObjectData((SObject)vendProduct, vendObjectMap, Schema.SObjectType.Vend_Product__c.fields.getMap());
+
+                            insertProducts.put(vend_id, vendProduct);
                         }
                     }
                     when sales {
 
-                        Vend_Sale__c vendSale = new Vend_Sale__c(Id__c = id);
-                        Vend_Sync_Object.HandleObjectData((SObject)vendSale, vendObjectMap, Schema.SObjectType.Vend_Sale__c.fields.getMap());
+                        Boolean processSaleRecord = false;
+                        if (vendSales.containsKey(vend_id)) {
 
-                        if (vendSales.containsKey(id)) {
-                            // TBD - Add check to see if data changed then set the data change flag
-                            vendSale.Id = vendSales.get(id).Id;
-                            updateSales.put(id, (Vend_Sale__c)vendSale);
+                            if (vendSales.get(vend_id).updated_at__c <> vend_updated_at) {
+
+                                Vend_Sale__c vendSale = new Vend_Sale__c(id__c = vend_id);
+                                Vend_Sync_Object.HandleObjectData((SObject)vendSale, vendObjectMap, Schema.SObjectType.Vend_Sale__c.fields.getMap());      
+                                processSaleRecord = true;
+
+                                vendSale.Id = vendSales.get(vend_id).Id;
+
+                                // Field to signal the record has been changed
+                                vendSale.Record_Reconciled__c = false;
+
+                                updateSales.put(vend_id, vendSale);
+                            }
                         }
                         else {
-                            insertSales.put(id, (Vend_Sale__c)vendSale);
+                            Vend_Sale__c vendSale = new Vend_Sale__c(id__c = vend_id);
+                            Vend_Sync_Object.HandleObjectData((SObject)vendSale, vendObjectMap, Schema.SObjectType.Vend_Sale__c.fields.getMap());      
+                            processSaleRecord = true;
+
+                            insertSales.put(vend_id, vendSale);
+                        }
+
+                        if (processSaleRecord) {
+                            // Store line_items
+                            List<Object> vendSaleLineItemObjects = (List<Object>) vendObjectMap.get('line_items');
+                            if (vendSaleLineItemObjects <> null && vendSaleLineItemObjects.size() > 0) {
+                                vendSaleLineItems.put(vend_id, vendSaleLineItemObjects);
+                            }
                         }
                     }
                 }
 
-                System.debug(LoggingLevel.DEBUG, '*****Vend_Sync_Object::execute - queryOffset: ' + queryOffset + ' queryLimit: ' + queryLimit + ' syncIndex: ' + syncIndex++ + ' id: ' + id);
+                System.debug(LoggingLevel.DEBUG, '*****Vend_Sync_Object::SyncVendObject_Future - queryOffset: ' + queryOffset + ' queryLimit: ' + queryLimit + ' syncIndex: ' + syncIndex++ + ' vend_id: ' + vend_id);
             }
 
             // Setup queryOffset for next collection
@@ -191,13 +246,13 @@ global class Vend_Sync_Object {
         switch on vendApiType {
             when customers {
 
-                System.debug(LoggingLevel.DEBUG, '*****Vend_Sync_Object::execute ' + vendApiType.name() + ' update count: ' + updateCustomers.size() + ' insert count: ' + insertCustomers.size());
+                System.debug(LoggingLevel.DEBUG, '*****Vend_Sync_Object::SyncVendObject_Future ' + vendApiType.name() + ' update count: ' + updateCustomers.size() + ' insert count: ' + insertCustomers.size());
 
                 if (!updateCustomers.isEmpty()) {
                     Database.SaveResult[] saveResults = Database.update(updateCustomers.values(), false);
                     for (Database.SaveResult result : saveResults) {
                         if (!result.isSuccess()) {
-                            Vend_Sync_SharedCode.SendAdminAlert(LoggingLevel.ERROR, Vend_Sync_SharedCode.ADMIN_TYPE, '*****Vend_Sync_Object::execute Update ' + result.getErrors());
+                            Vend_Sync_SharedCode.SendAdminAlert(LoggingLevel.ERROR, Vend_Sync_SharedCode.ADMIN_TYPE, '*****Vend_Sync_Object::SyncVendObject_Future Update ' + result.getErrors());
                             break;
                         }
                     }
@@ -207,7 +262,7 @@ global class Vend_Sync_Object {
                     Database.SaveResult[] saveResults = Database.insert(insertCustomers.values(), false);
                     for (Database.SaveResult result : saveResults) {
                         if (!result.isSuccess()) {
-                            Vend_Sync_SharedCode.SendAdminAlert(LoggingLevel.ERROR, Vend_Sync_SharedCode.ADMIN_TYPE, '*****Vend_Sync_Object::execute Insert ' + result.getErrors());
+                            Vend_Sync_SharedCode.SendAdminAlert(LoggingLevel.ERROR, Vend_Sync_SharedCode.ADMIN_TYPE, '*****Vend_Sync_Object::SyncVendObject_Future Insert ' + result.getErrors());
                             break;
                         }
                     }
@@ -215,13 +270,13 @@ global class Vend_Sync_Object {
             }
             when products {
 
-                System.debug(LoggingLevel.DEBUG, '*****Vend_Sync_Object::execute ' + vendApiType.name() + ' update count: ' + updateProducts.size() + ' insert count: ' + insertProducts.size());
+                System.debug(LoggingLevel.DEBUG, '*****Vend_Sync_Object::SyncVendObject_Future ' + vendApiType.name() + ' update count: ' + updateProducts.size() + ' insert count: ' + insertProducts.size());
 
                 if (!updateProducts.isEmpty()) {
                     Database.SaveResult[] saveResults = Database.update(updateProducts.values(), false);
                     for (Database.SaveResult result : saveResults) {
                         if (!result.isSuccess()) {
-                            Vend_Sync_SharedCode.SendAdminAlert(LoggingLevel.ERROR, Vend_Sync_SharedCode.ADMIN_TYPE, '*****Vend_Sync_Object::execute Update ' + result.getErrors());
+                            Vend_Sync_SharedCode.SendAdminAlert(LoggingLevel.ERROR, Vend_Sync_SharedCode.ADMIN_TYPE, '*****Vend_Sync_Object::SyncVendObject_Future Update ' + result.getErrors());
                             break;
                         }
                     }
@@ -231,7 +286,7 @@ global class Vend_Sync_Object {
                     Database.SaveResult[] saveResults = Database.insert(insertProducts.values(), false);
                     for (Database.SaveResult result : saveResults) {
                         if (!result.isSuccess()) {
-                            Vend_Sync_SharedCode.SendAdminAlert(LoggingLevel.ERROR, Vend_Sync_SharedCode.ADMIN_TYPE, '*****Vend_Sync_Object::execute Insert ' + result.getErrors());
+                            Vend_Sync_SharedCode.SendAdminAlert(LoggingLevel.ERROR, Vend_Sync_SharedCode.ADMIN_TYPE, '*****Vend_Sync_Object::SyncVendObject_Future Insert ' + result.getErrors());
                             break;
                         }
                     }
@@ -239,13 +294,13 @@ global class Vend_Sync_Object {
             }
             when sales {
 
-                System.debug(LoggingLevel.DEBUG, '*****Vend_Sync_Object::execute ' + vendApiType.name() + ' update count: ' + updateSales.size() + ' insert count: ' + insertSales.size());
+                System.debug(LoggingLevel.DEBUG, '*****Vend_Sync_Object::SyncVendObject_Future ' + vendApiType.name() + ' update count: ' + updateSales.size() + ' insert count: ' + insertSales.size());
 
                 if (!updateSales.isEmpty()) {
                     Database.SaveResult[] saveResults = Database.update(updateSales.values(), false);
                     for (Database.SaveResult result : saveResults) {
                         if (!result.isSuccess()) {
-                            Vend_Sync_SharedCode.SendAdminAlert(LoggingLevel.ERROR, Vend_Sync_SharedCode.ADMIN_TYPE, '*****Vend_Sync_Object::execute Update ' + result.getErrors());
+                            Vend_Sync_SharedCode.SendAdminAlert(LoggingLevel.ERROR, Vend_Sync_SharedCode.ADMIN_TYPE, '*****Vend_Sync_Object::SyncVendObject_Future Update ' + result.getErrors());
                             break;
                         }
                     }
@@ -255,12 +310,100 @@ global class Vend_Sync_Object {
                     Database.SaveResult[] saveResults = Database.insert(insertSales.values(), false);
                     for (Database.SaveResult result : saveResults) {
                         if (!result.isSuccess()) {
-                            Vend_Sync_SharedCode.SendAdminAlert(LoggingLevel.ERROR, Vend_Sync_SharedCode.ADMIN_TYPE, '*****Vend_Sync_Object::execute Insert ' + result.getErrors());
+                            Vend_Sync_SharedCode.SendAdminAlert(LoggingLevel.ERROR, Vend_Sync_SharedCode.ADMIN_TYPE, '*****Vend_Sync_Object::SyncVendObject_Future Insert ' + result.getErrors());
                             break;
                         }
                     }
                 }
+
+                // Process Sales - line_items
+                Vend_Sync_Object.ProcessSaleLineItems(vendSaleLineItems, updateSales, insertSales);
             }
+        }
+    }
+
+    private static void ProcessSaleLineItems(Map<String, List<Object>> vendSaleLineItems, Map<String, Vend_Sale__c> updateSales, Map<String, Vend_Sale__c> insertSales) {
+
+        System.debug(LoggingLevel.DEBUG, '***** ProcessSaleLineItems vendSaleLineItems: ' + vendSaleLineItems);
+        System.debug(LoggingLevel.DEBUG, '***** ProcessSaleLineItems updateSales: ' + updateSales);
+        System.debug(LoggingLevel.DEBUG, '***** ProcessSaleLineItems insertSales: ' + insertSales);
+
+		List<Vend_Sale_Line_Item__c> insertSaleLineItems = new List<Vend_Sale_Line_Item__c>();
+
+        Set<String> vendSaleLineItemIds = new Set<String>();
+        for (Vend_Sale_Line_Item__c vendSaleLineItem :[SELECT id__c FROM Vend_Sale_Line_Item__c]) {
+            vendSaleLineItemIds.add(vendSaleLineItem.id__c);
+        }
+
+        System.debug(LoggingLevel.DEBUG, '***** ProcessSaleLineItems vendSaleLineItemIds: ' + vendSaleLineItemIds);
+
+        for (String vendSaleId :vendSaleLineItems.keySet()) {
+
+            String vendSaleSalesforceId = '';
+            if (updateSales.containsKey(vendSaleId)) {
+                vendSaleSalesforceId = updateSales.get(vendSaleId).Id;
+            }
+            else if (insertSales.containsKey(vendSaleId)) {
+                vendSaleSalesforceId = insertSales.get(vendSaleId).Id;
+            }
+            else {
+                String errorMessage = '*****Vend_Sync_Object::ProcessSaleLineItems AddError: Missing Vend_Sale__c Salesforce Id for Master-Detail with Vend_Sale_Line_Item__c.Vend_Sale__c';
+                Vend_Sync_SharedCode.SendAdminAlert(LoggingLevel.ERROR, Vend_Sync_SharedCode.ADMIN_TYPE, errorMessage);
+            }
+
+            for (Object vendObject :vendSaleLineItems.get(vendSaleId)) {
+            
+                String JSONData = JSON.serialize(vendObject);
+                Map<String, Object> vendObjectMap = (Map<String, Object>)JSON.deserializeUntyped(JSONData);
+
+                System.debug(LoggingLevel.DEBUG, '***** ProcessSaleLineItems vendObjectMap: ' + vendObjectMap);
+
+				if (vendObjectMap == null) {
+					String errorMessage = '*****Vend_Sync_Object::ProcessSaleLineItems AddError: Malformed JSON Data';
+                    Vend_Sync_SharedCode.SendAdminAlert(LoggingLevel.ERROR, Vend_Sync_SharedCode.ADMIN_TYPE, errorMessage);
+
+					continue;
+				}
+
+                // Check for required fields
+                //
+
+                // Check for id
+                if (vendObjectMap.get('id') == null) {
+                    String errorMessage = '*****Vend_Sync_Object::ProcessSaleLineItems AddError: Malformed JSON Data missing id field';
+                    Vend_Sync_SharedCode.SendAdminAlert(LoggingLevel.ERROR, Vend_Sync_SharedCode.ADMIN_TYPE, errorMessage);
+
+                    continue;
+                }
+                String vend_id = String.valueOf(vendObjectMap.get('id'));
+
+                // Check for sequence
+                if (vendObjectMap.get('sequence') == null) {
+                    String errorMessage = '*****Vend_Sync_Object::ProcessSaleLineItems AddError: Malformed JSON Data missing id field';
+                    Vend_Sync_SharedCode.SendAdminAlert(LoggingLevel.ERROR, Vend_Sync_SharedCode.ADMIN_TYPE, errorMessage);
+
+                    continue;
+                }
+                String sequence = String.valueOf(vendObjectMap.get('sequence'));
+
+                vend_id += sequence;
+                if (vendSaleLineItemIds.contains(vend_id)) {
+                    continue;
+                }
+
+                Vend_Sale_Line_Item__c vendSaleLineItem = new Vend_Sale_Line_Item__c(id__c = vend_id, Vend_Sale__c = vendSaleSalesforceId);
+                Vend_Sync_Object.HandleObjectData((SObject)vendSaleLineItem, vendObjectMap, Schema.SObjectType.Vend_Sale_Line_Item__c.fields.getMap());
+                insertSaleLineItems.add(vendSaleLineItem);
+            }
+        }
+
+        if (!insertSaleLineItems.isEmpty()) {  
+
+            System.debug(LoggingLevel.DEBUG, '***** ProcessSaleLineItems Insert insertSaleLineItems: ' + insertSaleLineItems);
+
+            // Attempt insert and ignore errors - line items don't have an update_at field so don't know when they change.  Potentially could use the sales updated_at but for now just try to insert and
+            //      let the DB block the insert if already in the DB
+            Database.insert(insertSaleLineItems, false);
         }
     }
 
@@ -323,26 +466,36 @@ global class Vend_Sync_Object {
                             fResult.getType() == Schema.DisplayType.PICKLIST ||
                             fResult.getType() == Schema.DisplayType.MULTIPICKLIST) {
 
-                            System.debug(LoggingLevel.DEBUG, '*****Vend_Sync_Object::HandleObjectData put String salesforceObject: ' + salesforceObject);
-                            salesforceObject.put(objectField, jsonFieldStringValue);
+                                salesforceObject.put(objectField, jsonFieldStringValue);
+                                System.debug(LoggingLevel.DEBUG, '*****Vend_Sync_Object::HandleObjectData put String salesforceObject: ' + salesforceObject + ' jsonFieldStringValue: ' + jsonFieldStringValue);
                         }
                         else if (fResult.getType() == Schema.DisplayType.DOUBLE || fResult.getType() == Schema.DisplayType.INTEGER) {
 
-                            System.debug(LoggingLevel.DEBUG, '*****Vend_Sync_Object::HandleObjectData put Double/Integer salesforceObject: ' + salesforceObject);
                             salesforceObject.put(objectField, Integer.valueOf(jsonFieldStringValue));
+                            System.debug(LoggingLevel.DEBUG, '*****Vend_Sync_Object::HandleObjectData put Double/Integer salesforceObject: ' + salesforceObject + ' jsonFieldStringValue: ' + jsonFieldStringValue);
+                        }
+                        else if (fResult.getType() == Schema.DisplayType.PERCENT) {
+
+                            salesforceObject.put(objectField, Decimal.valueOf(jsonFieldStringValue));
+                            System.debug(LoggingLevel.DEBUG, '*****Vend_Sync_Object::HandleObjectData put Double/Integer salesforceObject: ' + salesforceObject + ' jsonFieldStringValue: ' + jsonFieldStringValue);
                         }
                         else if (fResult.getType() == Schema.DisplayType.BOOLEAN) {
 
-                            System.debug(LoggingLevel.DEBUG, '*****Vend_Sync_Object::HandleObjectData put Boolean salesforceObject: ' + salesforceObject);
                             salesforceObject.put(objectField, Boolean.valueOf(jsonFieldStringValue));
+                            System.debug(LoggingLevel.DEBUG, '*****Vend_Sync_Object::HandleObjectData put Boolean salesforceObject: ' + salesforceObject + ' jsonFieldStringValue: ' + jsonFieldStringValue);
                         }
                         else if (fResult.getType() == Schema.DisplayType.DATE) {
 
-                            System.debug(LoggingLevel.DEBUG, '*****Vend_Sync_Object::HandleObjectData put Date salesforceObject: ' + salesforceObject);
                             salesforceObject.put(objectField, Date.valueOf(jsonFieldStringValue));
+                            System.debug(LoggingLevel.DEBUG, '*****Vend_Sync_Object::HandleObjectData put Date salesforceObject: ' + salesforceObject + ' jsonFieldStringValue: ' + jsonFieldStringValue);
+                        }
+                        else if (fResult.getType() == Schema.DisplayType.DATETIME) {
+
+                            salesforceObject.put(objectField, Datetime.valueOf(Vend_Sync_SharedCode.CleanVendJsonDateTime(jsonFieldStringValue)));
+                            System.debug(LoggingLevel.DEBUG, '*****Vend_Sync_Object::HandleObjectData put Datetime salesforceObject: ' + salesforceObject + ' jsonFieldStringValue: ' + jsonFieldStringValue);
                         }
                         else if (fResult.getType() == Schema.DisplayType.REFERENCE) {
-                            System.debug(LoggingLevel.DEBUG, '*****Vend_Sync_Object::HandleObjectData put Reference (Ignore) salesforceObject: ' + salesforceObject);
+                            System.debug(LoggingLevel.DEBUG, '*****Vend_Sync_Object::HandleObjectData put Reference (Ignore) salesforceObject: ' + salesforceObject + ' jsonFieldStringValue: ' + jsonFieldStringValue);
                             continue;
                         }
                         else {

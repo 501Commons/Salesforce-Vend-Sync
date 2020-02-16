@@ -49,7 +49,7 @@
     <enableFeeds>false</enableFeeds>
     <enableHistory>false</enableHistory>
     <enableReports>true</enableReports>
-    <enableSearch>false</enableSearch>
+    <enableSearch>true</enableSearch>
     <enableSharing>true</enableSharing>
     <enableStreamingApi>true</enableStreamingApi>
     <fields>
@@ -62,15 +62,14 @@
         <type>Checkbox</type>
     </fields>
     <fields>
-        <fullName>Type__c</fullName>
-        <description>The Product Type as it comes from Vend.</description>
+        <fullName>Record_Reconciled__c</fullName>
+        <defaultValue>false</defaultValue>
+        <description>Vend record reconciled with any related Salesforce records</description>
         <externalId>false</externalId>
-        <label>Type</label>
-        <length>32</length>
-        <required>false</required>
+        <inlineHelpText>Vend record reconciled with any related Salesforce records</inlineHelpText>
+        <label>Record Reconciled</label>
         <trackTrending>false</trackTrending>
-        <type>Text</type>
-        <unique>false</unique>
+        <type>Checkbox</type>
     </fields>
     <fields>
         <fullName>Vend_Name__c</fullName>
@@ -105,7 +104,38 @@
         <type>Text</type>
         <unique>false</unique>
     </fields>
+    <fields>
+        <fullName>type__c</fullName>
+        <description>The Product Type as it comes from Vend.</description>
+        <externalId>false</externalId>
+        <label>Type</label>
+        <length>32</length>
+        <required>false</required>
+        <trackTrending>false</trackTrending>
+        <type>Text</type>
+        <unique>false</unique>
+    </fields>
+    <fields>
+        <fullName>updated_at__c</fullName>
+        <description>Date/Timestamp from Vend</description>
+        <externalId>false</externalId>
+        <label>Updated At</label>
+        <required>false</required>
+        <trackTrending>false</trackTrending>
+        <type>DateTime</type>
+    </fields>
     <label>Vend Product</label>
+    <listViews>
+        <fullName>All</fullName>
+        <columns>NAME</columns>
+        <columns>Record_Reconciled__c</columns>
+        <columns>type__c</columns>
+        <columns>id__c</columns>
+        <columns>Vend_Name__c</columns>
+        <columns>sku__c</columns>
+        <filterScope>Everything</filterScope>
+        <label>All</label>
+    </listViews>
     <nameField>
         <displayFormat>VP-{00000}</displayFormat>
         <label>Vend Product Name</label>

@@ -56,7 +56,7 @@ public with sharing class Vend_Sync_Batch {
 
     public class InvalidParameterValueException extends Exception {}
 
-    @InvocableMethod(label='Vend Sync' description='Vend Sync data from Vend REST API into Salesforce.')
+    @InvocableMethod(label='Vend Sync Batch' description='Vend Sync data from Vend REST API into Salesforce.')
     public static void vendSyncBatch() {
 
       Vend_Sync_Object.SyncVendObject_Future(Vend_Sync_Object.VendApiTypes.customers.name());

@@ -43,25 +43,15 @@
     <allowInChatterGroups>false</allowInChatterGroups>
     <compactLayoutAssignment>SYSTEM</compactLayoutAssignment>
     <deploymentStatus>Deployed</deploymentStatus>
-    <description>Holds the Sales records that come from Vend.</description>
     <enableActivities>false</enableActivities>
     <enableBulkApi>true</enableBulkApi>
     <enableChangeDataCapture>false</enableChangeDataCapture>
     <enableFeeds>false</enableFeeds>
     <enableHistory>false</enableHistory>
-    <enableReports>true</enableReports>
-    <enableSearch>true</enableSearch>
+    <enableReports>false</enableReports>
+    <enableSearch>false</enableSearch>
     <enableSharing>true</enableSharing>
     <enableStreamingApi>true</enableStreamingApi>
-    <fields>
-        <fullName>Opportunity_Updated__c</fullName>
-        <defaultValue>false</defaultValue>
-        <description>Checked means that the record has been processed and the Salesforce Opportunity has been created.</description>
-        <externalId>false</externalId>
-        <label>Opportunity Updated</label>
-        <trackTrending>false</trackTrending>
-        <type>Checkbox</type>
-    </fields>
     <fields>
         <fullName>Record_Reconciled__c</fullName>
         <defaultValue>false</defaultValue>
@@ -73,65 +63,48 @@
         <type>Checkbox</type>
     </fields>
     <fields>
-        <fullName>customer_id__c</fullName>
+        <fullName>Vend_Sale__c</fullName>
         <externalId>false</externalId>
-        <label>Vend Customer ID</label>
-        <length>64</length>
-        <required>false</required>
+        <label>Vend Sale</label>
+        <referenceTo>Vend_Sale__c</referenceTo>
+        <relationshipLabel>Vend Sale Line Items</relationshipLabel>
+        <relationshipName>Vend_Sale_Line_Items</relationshipName>
+        <relationshipOrder>0</relationshipOrder>
+        <reparentableMasterDetail>false</reparentableMasterDetail>
         <trackTrending>false</trackTrending>
-        <type>Text</type>
-        <unique>false</unique>
+        <type>MasterDetail</type>
+        <writeRequiresMasterRead>false</writeRequiresMasterRead>
     </fields>
     <fields>
         <fullName>id__c</fullName>
         <caseSensitive>false</caseSensitive>
-        <description>Holds the Sale Id that comes from Vend</description>
         <externalId>true</externalId>
-        <inlineHelpText>Transaction id of Vend sale</inlineHelpText>
         <label>Vend Id</label>
-        <length>36</length>
+        <length>38</length>
         <required>true</required>
         <trackTrending>false</trackTrending>
         <type>Text</type>
         <unique>true</unique>
     </fields>
     <fields>
-        <fullName>product_id__c</fullName>
-        <description>Product ID as it comes from Vend</description>
+        <fullName>sequence__c</fullName>
         <externalId>false</externalId>
-        <label>Vend Product ID</label>
-        <length>64</length>
-        <required>false</required>
+        <label>sequence</label>
+        <precision>2</precision>
+        <required>true</required>
+        <scale>0</scale>
         <trackTrending>false</trackTrending>
-        <type>Text</type>
+        <type>Number</type>
         <unique>false</unique>
     </fields>
-    <fields>
-        <fullName>updated_at__c</fullName>
-        <externalId>false</externalId>
-        <label>Updated At</label>
-        <required>false</required>
-        <trackTrending>false</trackTrending>
-        <type>DateTime</type>
-    </fields>
-    <label>Vend Sale</label>
-    <listViews>
-        <fullName>All</fullName>
-        <columns>NAME</columns>
-        <columns>CREATED_DATE</columns>
-        <columns>customer_id__c</columns>
-        <columns>id__c</columns>
-        <columns>product_id__c</columns>
-        <filterScope>Everything</filterScope>
-        <label>All</label>
-    </listViews>
+    <label>Vend Sale Line Item</label>
     <nameField>
-        <displayFormat>VS-{00000}</displayFormat>
-        <label>Vend Sale Name</label>
+        <displayFormat>SLI-{0000}</displayFormat>
+        <label>Vend Sale Line Item Name</label>
         <type>AutoNumber</type>
     </nameField>
-    <pluralLabel>Vend Sales</pluralLabel>
+    <pluralLabel>Vend Sale Line Items</pluralLabel>
     <searchLayouts/>
-    <sharingModel>ReadWrite</sharingModel>
+    <sharingModel>ControlledByParent</sharingModel>
     <visibility>Public</visibility>
 </CustomObject>

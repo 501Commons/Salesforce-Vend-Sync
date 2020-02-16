@@ -6,4 +6,7 @@
     <label>VEND Sync</label>
     <tabs>standard-report</tabs>
     <tabs>standard-Dashboard</tabs>
+    <tabs>Vend_Customer__c</tabs>
+    <tabs>Vend_Product__c</tabs>
+    <tabs>Vend_Sale__c</tabs>
 </CustomApplication>
