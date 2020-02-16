@@ -67,8 +67,6 @@ global class Vend_Sync_Object {
         request.setHeader('Authorization', 'Bearer ' + Vend_Sync_SharedCode.GetExternalWebsiteToken());
         request.setHeader('Content-Type', 'application/json');
 
-        System.debug(LoggingLevel.DEBUG, '***** Vend_Sync_Object::SyncVendObject_Future request: ' + request);
-
         // Optimization Question? Can you use SObject instead of having 3 different sets of maps
         //
 		Map<String, Vend_Customer__c> updateCustomers = new Map<String, Vend_Customer__c>();
@@ -294,9 +292,9 @@ global class Vend_Sync_Object {
             }
             when sales {
 
-                System.debug(LoggingLevel.DEBUG, '*****Vend_Sync_Object::SyncVendObject_Future ' + vendApiType.name() + ' update count: ' + updateSales.size() + ' insert count: ' + insertSales.size());
-
                 if (!updateSales.isEmpty()) {
+
+                    System.debug(LoggingLevel.DEBUG, '*****Vend_Sync_Object::SyncVendObject_Future ' + vendApiType.name() + ' update count: ' + updateSales.size());
                     Database.SaveResult[] saveResults = Database.update(updateSales.values(), false);
                     for (Database.SaveResult result : saveResults) {
                         if (!result.isSuccess()) {
@@ -307,6 +305,8 @@ global class Vend_Sync_Object {
                 }
         
                 if (!insertSales.isEmpty()) {  
+
+                    System.debug(LoggingLevel.DEBUG, '*****Vend_Sync_Object::SyncVendObject_Future ' + vendApiType.name() + ' insert count: ' + insertSales.size());
                     Database.SaveResult[] saveResults = Database.insert(insertSales.values(), false);
                     for (Database.SaveResult result : saveResults) {
                         if (!result.isSuccess()) {
@@ -323,10 +323,6 @@ global class Vend_Sync_Object {
     }
 
     private static void ProcessSaleLineItems(Map<String, List<Object>> vendSaleLineItems, Map<String, Vend_Sale__c> updateSales, Map<String, Vend_Sale__c> insertSales) {
-
-        System.debug(LoggingLevel.DEBUG, '***** ProcessSaleLineItems vendSaleLineItems: ' + vendSaleLineItems);
-        System.debug(LoggingLevel.DEBUG, '***** ProcessSaleLineItems updateSales: ' + updateSales);
-        System.debug(LoggingLevel.DEBUG, '***** ProcessSaleLineItems insertSales: ' + insertSales);
 
 		List<Vend_Sale_Line_Item__c> insertSaleLineItems = new List<Vend_Sale_Line_Item__c>();
 
@@ -397,7 +393,7 @@ global class Vend_Sync_Object {
 
         if (!insertSaleLineItems.isEmpty()) {  
 
-            System.debug(LoggingLevel.DEBUG, '***** ProcessSaleLineItems Insert insertSaleLineItems: ' + insertSaleLineItems);
+            System.debug(LoggingLevel.DEBUG, '*****Vend_Sync_Object::SyncVendObject_Future ProcessSaleLineItems insert count: ' + insertSaleLineItems.size());
 
             // Attempt insert and ignore errors - line items don't have an update_at field so don't know when they change.  Potentially could use the sales updated_at but for now just try to insert and
             //      let the DB block the insert if already in the DB
