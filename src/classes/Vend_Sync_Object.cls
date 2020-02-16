@@ -244,9 +244,9 @@ global class Vend_Sync_Object {
         switch on vendApiType {
             when customers {
 
-                System.debug(LoggingLevel.DEBUG, '*****Vend_Sync_Object::SyncVendObject_Future ' + vendApiType.name() + ' update count: ' + updateCustomers.size() + ' insert count: ' + insertCustomers.size());
-
                 if (!updateCustomers.isEmpty()) {
+
+                    System.debug(LoggingLevel.DEBUG, '*****Vend_Sync_Object::SyncVendObject_Future ' + vendApiType.name() + ' update count: ' + updateCustomers.size());
                     Database.SaveResult[] saveResults = Database.update(updateCustomers.values(), false);
                     for (Database.SaveResult result : saveResults) {
                         if (!result.isSuccess()) {
@@ -257,6 +257,8 @@ global class Vend_Sync_Object {
                 }
         
                 if (!insertCustomers.isEmpty()) {  
+
+                    System.debug(LoggingLevel.DEBUG, '*****Vend_Sync_Object::SyncVendObject_Future ' + vendApiType.name() + ' insert count: ' + insertCustomers.size());
                     Database.SaveResult[] saveResults = Database.insert(insertCustomers.values(), false);
                     for (Database.SaveResult result : saveResults) {
                         if (!result.isSuccess()) {
@@ -268,9 +270,9 @@ global class Vend_Sync_Object {
             }
             when products {
 
-                System.debug(LoggingLevel.DEBUG, '*****Vend_Sync_Object::SyncVendObject_Future ' + vendApiType.name() + ' update count: ' + updateProducts.size() + ' insert count: ' + insertProducts.size());
-
                 if (!updateProducts.isEmpty()) {
+
+                    System.debug(LoggingLevel.DEBUG, '*****Vend_Sync_Object::SyncVendObject_Future ' + vendApiType.name() + ' update count: ' + updateProducts.size());
                     Database.SaveResult[] saveResults = Database.update(updateProducts.values(), false);
                     for (Database.SaveResult result : saveResults) {
                         if (!result.isSuccess()) {
@@ -281,6 +283,8 @@ global class Vend_Sync_Object {
                 }
         
                 if (!insertProducts.isEmpty()) {  
+
+                    System.debug(LoggingLevel.DEBUG, '*****Vend_Sync_Object::SyncVendObject_Future ' + vendApiType.name() + ' insert count: ' + insertProducts.size());
                     Database.SaveResult[] saveResults = Database.insert(insertProducts.values(), false);
                     for (Database.SaveResult result : saveResults) {
                         if (!result.isSuccess()) {
