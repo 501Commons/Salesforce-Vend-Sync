@@ -331,8 +331,6 @@ global class Vend_Sync_Object {
             vendSaleLineItemIds.add(vendSaleLineItem.id__c);
         }
 
-        System.debug(LoggingLevel.DEBUG, '***** ProcessSaleLineItems vendSaleLineItemIds: ' + vendSaleLineItemIds);
-
         for (String vendSaleId :vendSaleLineItems.keySet()) {
 
             String vendSaleSalesforceId = '';
