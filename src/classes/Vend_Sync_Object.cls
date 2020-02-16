@@ -356,8 +356,6 @@ global class Vend_Sync_Object {
                 String JSONData = JSON.serialize(vendObject);
                 Map<String, Object> vendObjectMap = (Map<String, Object>)JSON.deserializeUntyped(JSONData);
 
-                System.debug(LoggingLevel.DEBUG, '***** ProcessSaleLineItems vendObjectMap: ' + vendObjectMap);
-
 				if (vendObjectMap == null) {
 					String errorMessage = '*****Vend_Sync_Object::ProcessSaleLineItems AddError: Malformed JSON Data';
                     Vend_Sync_SharedCode.SendAdminAlert(LoggingLevel.ERROR, Vend_Sync_SharedCode.ADMIN_TYPE, errorMessage);
@@ -456,8 +454,6 @@ global class Vend_Sync_Object {
                         continue;
                     }
 
-                    System.debug(LoggingLevel.DEBUG, '*****Vend_Sync_Object::HandleObjectData objectField: ' + objectField + ' fResult.getType(): ' + fResult.getType() + ' jsonFieldStringValue: ' + jsonFieldStringValue);
-
                     if (fResult.isUpdateable() && fResult.isAccessible()) {
                         if (fResult.getType() == Schema.DisplayType.STRING ||
                             fResult.getType() == Schema.DisplayType.EMAIL ||
@@ -466,36 +462,29 @@ global class Vend_Sync_Object {
                             fResult.getType() == Schema.DisplayType.PICKLIST ||
                             fResult.getType() == Schema.DisplayType.MULTIPICKLIST) {
 
-                                salesforceObject.put(objectField, jsonFieldStringValue);
-                                System.debug(LoggingLevel.DEBUG, '*****Vend_Sync_Object::HandleObjectData put String salesforceObject: ' + salesforceObject + ' jsonFieldStringValue: ' + jsonFieldStringValue);
+                            salesforceObject.put(objectField, jsonFieldStringValue);
                         }
                         else if (fResult.getType() == Schema.DisplayType.DOUBLE || fResult.getType() == Schema.DisplayType.INTEGER) {
 
                             salesforceObject.put(objectField, Integer.valueOf(jsonFieldStringValue));
-                            System.debug(LoggingLevel.DEBUG, '*****Vend_Sync_Object::HandleObjectData put Double/Integer salesforceObject: ' + salesforceObject + ' jsonFieldStringValue: ' + jsonFieldStringValue);
                         }
                         else if (fResult.getType() == Schema.DisplayType.PERCENT) {
 
                             salesforceObject.put(objectField, Decimal.valueOf(jsonFieldStringValue));
-                            System.debug(LoggingLevel.DEBUG, '*****Vend_Sync_Object::HandleObjectData put Double/Integer salesforceObject: ' + salesforceObject + ' jsonFieldStringValue: ' + jsonFieldStringValue);
                         }
                         else if (fResult.getType() == Schema.DisplayType.BOOLEAN) {
 
                             salesforceObject.put(objectField, Boolean.valueOf(jsonFieldStringValue));
-                            System.debug(LoggingLevel.DEBUG, '*****Vend_Sync_Object::HandleObjectData put Boolean salesforceObject: ' + salesforceObject + ' jsonFieldStringValue: ' + jsonFieldStringValue);
                         }
                         else if (fResult.getType() == Schema.DisplayType.DATE) {
 
                             salesforceObject.put(objectField, Date.valueOf(jsonFieldStringValue));
-                            System.debug(LoggingLevel.DEBUG, '*****Vend_Sync_Object::HandleObjectData put Date salesforceObject: ' + salesforceObject + ' jsonFieldStringValue: ' + jsonFieldStringValue);
                         }
                         else if (fResult.getType() == Schema.DisplayType.DATETIME) {
 
                             salesforceObject.put(objectField, Datetime.valueOf(Vend_Sync_SharedCode.CleanVendJsonDateTime(jsonFieldStringValue)));
-                            System.debug(LoggingLevel.DEBUG, '*****Vend_Sync_Object::HandleObjectData put Datetime salesforceObject: ' + salesforceObject + ' jsonFieldStringValue: ' + jsonFieldStringValue);
                         }
                         else if (fResult.getType() == Schema.DisplayType.REFERENCE) {
-                            System.debug(LoggingLevel.DEBUG, '*****Vend_Sync_Object::HandleObjectData put Reference (Ignore) salesforceObject: ' + salesforceObject + ' jsonFieldStringValue: ' + jsonFieldStringValue);
                             continue;
                         }
                         else {
