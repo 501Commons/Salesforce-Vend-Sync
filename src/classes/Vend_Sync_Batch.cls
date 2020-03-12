@@ -28,36 +28,14 @@
     POSSIBILITY OF SUCH DAMAGE.
 
     Developer Console
-      Vend_Sync_Batch.vendSyncBatch();
-
-    REST Post Method (steps to call REST Method) - Called from Mass Action Scheduler
-
-        https://workbench.developerforce.com/restExplorer.php
-        POST
-        URL: /services/data/v46.0/actions/custom/apex/Vend_Sync_Batch
-
-        sr2020 Sandbox
-        {
-            "inputs" : [ {
-                "campaigns" : "701R00000008JS4IAM"
-            } ]
-        }
-
-        Production
-        {
-            "inputs" : [ {
-                "campaigns" : "7012I0000014IoB"
-            } ]
-        }
+      Vend_Sync_Batch scheduleVendSync = new Vend_Sync_Batch();
+      scheduleVendSync.execute(null);
 
 */
 
-public with sharing class Vend_Sync_Batch {
+global with sharing class Vend_Sync_Batch implements Schedulable {
 
-    public class InvalidParameterValueException extends Exception {}
-
-    @InvocableMethod(label='Vend Sync Batch' description='Vend Sync data from Vend REST API into Salesforce.')
-    public static void vendSyncBatch() {
+    global void execute(SchedulableContext sc) {
 
       Vend_Sync_Object syncCustomerRecords = new Vend_Sync_Object();
       syncCustomerRecords.vendApiType = Vend_Sync_Object.VendApiTypes.customers;
