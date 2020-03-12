@@ -53,6 +53,26 @@
     <enableSharing>true</enableSharing>
     <enableStreamingApi>true</enableStreamingApi>
     <fields>
+        <fullName>Create_Line_Item__c</fullName>
+        <defaultValue>false</defaultValue>
+        <description>If checked, the Vend Integration Process flow will create an Opportunity of record type Membership for the Vend Sale Line Item record.</description>
+        <externalId>false</externalId>
+        <inlineHelpText>If checked, the Vend Integration Process flow will create an Opportunity of record type Membership for the Vend Sale Line Item record.</inlineHelpText>
+        <label>Create Line Item</label>
+        <trackTrending>false</trackTrending>
+        <type>Checkbox</type>
+    </fields>
+    <fields>
+        <fullName>Project_SKU__c</fullName>
+        <externalId>false</externalId>
+        <label>Project SKU</label>
+        <length>180</length>
+        <required>false</required>
+        <trackTrending>false</trackTrending>
+        <type>Text</type>
+        <unique>false</unique>
+    </fields>
+    <fields>
         <fullName>Record_Reconciled__c</fullName>
         <defaultValue>false</defaultValue>
         <description>Vend record reconciled with any related Salesforce records</description>
@@ -87,6 +107,16 @@
         <unique>true</unique>
     </fields>
     <fields>
+        <fullName>product_id__c</fullName>
+        <externalId>false</externalId>
+        <label>Vend Product ID</label>
+        <length>64</length>
+        <required>false</required>
+        <trackTrending>false</trackTrending>
+        <type>Text</type>
+        <unique>false</unique>
+    </fields>
+    <fields>
         <fullName>sequence__c</fullName>
         <externalId>false</externalId>
         <label>sequence</label>
@@ -98,6 +128,11 @@
         <unique>false</unique>
     </fields>
     <label>Vend Sale Line Item</label>
+    <listViews>
+        <fullName>All</fullName>
+        <filterScope>Everything</filterScope>
+        <label>All</label>
+    </listViews>
     <nameField>
         <displayFormat>SLI-{0000}</displayFormat>
         <label>Vend Sale Line Item Name</label>

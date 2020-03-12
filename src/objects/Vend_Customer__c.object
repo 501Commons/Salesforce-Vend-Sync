@@ -77,7 +77,7 @@
         <description>Holds the Customer Code that comes from Vend.</description>
         <externalId>false</externalId>
         <label>Customer Code</label>
-        <length>24</length>
+        <length>128</length>
         <required>false</required>
         <trackTrending>false</trackTrending>
         <type>Text</type>

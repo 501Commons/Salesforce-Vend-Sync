@@ -1,40 +1,12 @@
-// Run Code FROM Developer Console
-//  1) Debug -> Open SyncVendObject_Future Anonymous Window
-//  2) paste code
-/*
-    Vend_Sync_Object.SyncVendObject_Future('customers');
-    Vend_Sync_Object.SyncVendObject_Future('products');
-    Vend_Sync_Object.SyncVendObject_Future('sales');
-*/
-//  3) click SyncVendObject_Future
-
-global class Vend_Sync_Object { 
+public class Vend_Sync_Object implements Queueable, Database.AllowsCallouts { 
 
     public enum VendApiTypes { customers, products, sales }
+    public VendApiTypes vendApiType;
     public class InvalidParameterValueException extends Exception {}
 
-    @future (callout=true)
-    public static void SyncVendObject_Future(String vendApiTypeString) {
+    public void execute(QueueableContext context) {
 
-        if (String.isBlank(vendApiTypeString)) {
-            throw new InvalidParameterValueException('Invalid vendApiTypeString is Null or Blank'); 
-        }
-
-        System.debug(LoggingLevel.DEBUG, '***** Vend_Sync_Object::SyncVendObject_Future - vendApiTypeString: ' + vendApiTypeString);
-
-        Vend_Sync_Object.VendApiTypes vendApiType = Vend_Sync_Object.VendApiTypes.customers;
-        if (Vend_Sync_Object.VendApiTypes.customers.name().equalsIgnoreCase(vendApiTypeString)) {
-            vendApiType = Vend_Sync_Object.VendApiTypes.customers;
-        }
-        else if (Vend_Sync_Object.VendApiTypes.products.name().equalsIgnoreCase(vendApiTypeString)) {
-            vendApiType = Vend_Sync_Object.VendApiTypes.products;
-        }
-        else if (Vend_Sync_Object.VendApiTypes.sales.name().equalsIgnoreCase(vendApiTypeString)) {
-            vendApiType = Vend_Sync_Object.VendApiTypes.sales;
-        }
-        else {
-            throw new InvalidParameterValueException('Invalid vendApiTypeString: ' + vendApiTypeString); 
-        }
+        System.debug(LoggingLevel.DEBUG, '***** Vend_Sync_Object::execute - vendApiType: ' + this.vendApiType.name());
 
         // Optimization Question? Can you use SObject instead of having 3 different sets of maps
         //
@@ -42,18 +14,21 @@ global class Vend_Sync_Object {
         Map<String, Vend_Product__c> vendProducts = new Map<String, Vend_Product__c>();
         Map<String, Vend_Sale__c> vendSales = new Map<String, Vend_Sale__c>();
 
-        switch on vendApiType {
+        switch on this.vendApiType {
             when customers {
+                System.debug('****Vend_Sync_Object:execute - SOQL Query: SELECT id__c, updated_at__c FROM Vend_Customer__c');
                 for (Vend_Customer__c customer :[SELECT id__c, updated_at__c FROM Vend_Customer__c]) {
                     vendCustomers.put(customer.id__c, customer);
                 }
             }
             when products {
+                System.debug('****Vend_Sync_Object:execute - SOQL Query: SELECT id__c, updated_at__c FROM Vend_Product__c');
                 for (Vend_Product__c product :[SELECT id__c, updated_at__c FROM Vend_Product__c]) {
                     vendProducts.put(product.id__c, product);
                 }
             }
             when sales {
+                System.debug('****Vend_Sync_Object:execute - SOQL Query: SELECT id__c, updated_at__c FROM Vend_Sale__c');
                 for (Vend_Sale__c sale :[SELECT id__c, updated_at__c FROM Vend_Sale__c]) {
                     vendSales.put(sale.id__c, sale);
                 }
@@ -79,14 +54,19 @@ global class Vend_Sync_Object {
         Map<String, List<Object>> vendSaleLineItems = new Map<String, List<Object>>();
 
         Integer queryOffset = 0;
-        Integer queryLimit = 100;
+        Integer queryLimit = 200;
         if (Vend_Sync_SharedCode.IsSandbox) {
-            queryLimit = 5;
+            queryLimit = 200;
         }
+        Long maxVersion = 0;
+        Integer maxDMLQueueSize = 1000;
+
+        Boolean singleInfoWritten = false;
 
         while (true) {
             
-            String endpoint = Vend_Sync_SharedCode.GetExternalWebsiteUrl() + vendApiType.name() + '?page_size=' + String.valueOf(queryLimit);
+            String endpoint = Vend_Sync_SharedCode.GetExternalWebsiteUrl() + this.vendApiType.name() + '?page_size=' + String.valueOf(queryLimit) + (maxVersion > 0 ? '&after=' + String.valueOf(maxVersion) : '');
+            System.debug(LoggingLevel.DEBUG, '*****Vend_Sync_Object::execute - queryOffset: ' + queryOffset + ' queryLimit: ' + queryLimit + ' endpoint: ' + endpoint);
             request.setEndpoint(endpoint);
 
             // Test Method doesn't support call outs
@@ -98,7 +78,7 @@ global class Vend_Sync_Object {
 
             if (response.getStatusCode() != 200) {
 
-                Vend_Sync_SharedCode.SendAdminAlert(LoggingLevel.ERROR, Vend_Sync_SharedCode.ADMIN_TYPE, '***** Vend_Sync_Object::SyncVendObject_Future - Exit: StatusCode != 200 for endpoint: ' + endpoint);
+                Vend_Sync_SharedCode.SendAdminAlert(LoggingLevel.ERROR, Vend_Sync_SharedCode.ADMIN_TYPE, '***** Vend_Sync_Object::execute - Exit: StatusCode != 200 for endpoint: ' + endpoint);
                 break;
             }
 
@@ -107,18 +87,33 @@ global class Vend_Sync_Object {
                 break;
             }
 
+            Map<String, Object> vendVersions = (Map<String, Object>) results.get('version');
+            if (vendVersions == null  || vendVersions.size() <= 0) {
+                break;
+            }
+
+            // Check for max
+            if (vendVersions.containsKey('max')) {
+                maxVersion = (Long)vendVersions.get('max');
+            }
+
             List<Object> vendObjects = (List<Object>) results.get('data');
             if (vendObjects == null  || vendObjects.size() <= 0) {
                 break;
             }
-            
-            Integer syncIndex = 1;
+
             for (Object vendObject: vendObjects) {
-                
+
                 String JSONData = JSON.serialize(vendObject);
+
+                if (!singleInfoWritten) {
+                    singleInfoWritten = true;
+                    Vend_Sync_SharedCode.SendAdminAlert(LoggingLevel.INFO, Vend_Sync_SharedCode.ADMIN_TYPE, 'JSON Details for ' + this.vendApiType.name() + ' : ' + JSONData);
+                }
+
                 Map<String, Object> vendObjectMap = (Map<String, Object>)JSON.deserializeUntyped(JSONData);
 				if (vendObjectMap == null) {
-					String errorMessage = '*****Vend_Sync_Object::SyncVendObject_Future AddError: Malformed JSON Data';
+					String errorMessage = '*****Vend_Sync_Object::execute AddError: Malformed JSON data';
                     Vend_Sync_SharedCode.SendAdminAlert(LoggingLevel.ERROR, Vend_Sync_SharedCode.ADMIN_TYPE, errorMessage);
 
 					continue;
@@ -129,7 +124,7 @@ global class Vend_Sync_Object {
 
                 // Check for id
                 if (vendObjectMap.get('id') == null) {
-                    String errorMessage = '*****Vend_Sync_Object::SyncVendObject_Future AddError: Malformed JSON Data missing id field';
+                    String errorMessage = '*****Vend_Sync_Object::execute AddError: Malformed JSON Data missing id field';
                     Vend_Sync_SharedCode.SendAdminAlert(LoggingLevel.ERROR, Vend_Sync_SharedCode.ADMIN_TYPE, errorMessage);
 
                     continue;
@@ -138,14 +133,14 @@ global class Vend_Sync_Object {
 
                 // Check for updated_at
                 if (vendObjectMap.get('updated_at') == null) {
-                    String errorMessage = '*****Vend_Sync_Object::SyncVendObject_Future AddError: Malformed JSON Data missing updated_at field';
+                    String errorMessage = '*****Vend_Sync_Object::execute AddError: Malformed JSON Data missing updated_at field';
                     Vend_Sync_SharedCode.SendAdminAlert(LoggingLevel.ERROR, Vend_Sync_SharedCode.ADMIN_TYPE, errorMessage);
 
                     continue;
                 }
                 DateTime vend_updated_at = Datetime.valueOf(Vend_Sync_SharedCode.CleanVendJsonDateTime(String.valueOf(vendObjectMap.get('updated_at'))));
 
-                switch on vendApiType {
+                switch on this.vendApiType {
                     when customers {
 
                         if (vendCustomers.containsKey(vend_id)) {
@@ -231,26 +226,34 @@ global class Vend_Sync_Object {
                     }
                 }
 
-                System.debug(LoggingLevel.DEBUG, '*****Vend_Sync_Object::SyncVendObject_Future - queryOffset: ' + queryOffset + ' queryLimit: ' + queryLimit + ' syncIndex: ' + syncIndex++ + ' vend_id: ' + vend_id);
+                if (Test.isRunningTest()) {
+                    break;
+                }   
             }
 
             // Setup queryOffset for next collection
             queryOffset += queryLimit;
 
-// DEBUG - kick out after 1 interation
-            break;
+            if (updateCustomers.size() > maxDMLQueueSize || insertCustomers.size() > maxDMLQueueSize ||
+                updateProducts.size() > maxDMLQueueSize || insertProducts.size() > maxDMLQueueSize ||
+                updateSales.size() > maxDMLQueueSize || insertSales.size() > maxDMLQueueSize ||
+                vendSaleLineItems.size() > maxDMLQueueSize) {
+
+                    System.debug('*****Vend_Sync_Object:execute Queue Size Exceeded so kick out and process, create more items on next sync');
+                    break;
+                }
 		}
 
-        switch on vendApiType {
+        switch on this.vendApiType {
             when customers {
 
                 if (!updateCustomers.isEmpty()) {
 
-                    System.debug(LoggingLevel.DEBUG, '*****Vend_Sync_Object::SyncVendObject_Future ' + vendApiType.name() + ' update count: ' + updateCustomers.size());
+                    System.debug(LoggingLevel.DEBUG, '*****Vend_Sync_Object::execute ' + this.vendApiType.name() + ' update count: ' + updateCustomers.size());
                     Database.SaveResult[] saveResults = Database.update(updateCustomers.values(), false);
                     for (Database.SaveResult result : saveResults) {
                         if (!result.isSuccess()) {
-                            Vend_Sync_SharedCode.SendAdminAlert(LoggingLevel.ERROR, Vend_Sync_SharedCode.ADMIN_TYPE, '*****Vend_Sync_Object::SyncVendObject_Future Update ' + result.getErrors());
+                            Vend_Sync_SharedCode.SendAdminAlert(LoggingLevel.ERROR, Vend_Sync_SharedCode.ADMIN_TYPE, '*****Vend_Sync_Object::execute Update ' + result.getErrors());
                             break;
                         }
                     }
@@ -258,11 +261,11 @@ global class Vend_Sync_Object {
         
                 if (!insertCustomers.isEmpty()) {  
 
-                    System.debug(LoggingLevel.DEBUG, '*****Vend_Sync_Object::SyncVendObject_Future ' + vendApiType.name() + ' insert count: ' + insertCustomers.size());
+                    System.debug(LoggingLevel.DEBUG, '*****Vend_Sync_Object::execute ' + this.vendApiType.name() + ' insert count: ' + insertCustomers.size());
                     Database.SaveResult[] saveResults = Database.insert(insertCustomers.values(), false);
                     for (Database.SaveResult result : saveResults) {
                         if (!result.isSuccess()) {
-                            Vend_Sync_SharedCode.SendAdminAlert(LoggingLevel.ERROR, Vend_Sync_SharedCode.ADMIN_TYPE, '*****Vend_Sync_Object::SyncVendObject_Future Insert ' + result.getErrors());
+                            Vend_Sync_SharedCode.SendAdminAlert(LoggingLevel.ERROR, Vend_Sync_SharedCode.ADMIN_TYPE, '*****Vend_Sync_Object::execute Insert ' + result.getErrors());
                             break;
                         }
                     }
@@ -272,11 +275,11 @@ global class Vend_Sync_Object {
 
                 if (!updateProducts.isEmpty()) {
 
-                    System.debug(LoggingLevel.DEBUG, '*****Vend_Sync_Object::SyncVendObject_Future ' + vendApiType.name() + ' update count: ' + updateProducts.size());
+                    System.debug(LoggingLevel.DEBUG, '*****Vend_Sync_Object::execute ' + this.vendApiType.name() + ' update count: ' + updateProducts.size());
                     Database.SaveResult[] saveResults = Database.update(updateProducts.values(), false);
                     for (Database.SaveResult result : saveResults) {
                         if (!result.isSuccess()) {
-                            Vend_Sync_SharedCode.SendAdminAlert(LoggingLevel.ERROR, Vend_Sync_SharedCode.ADMIN_TYPE, '*****Vend_Sync_Object::SyncVendObject_Future Update ' + result.getErrors());
+                            Vend_Sync_SharedCode.SendAdminAlert(LoggingLevel.ERROR, Vend_Sync_SharedCode.ADMIN_TYPE, '*****Vend_Sync_Object::execute Update ' + result.getErrors());
                             break;
                         }
                     }
@@ -284,11 +287,11 @@ global class Vend_Sync_Object {
         
                 if (!insertProducts.isEmpty()) {  
 
-                    System.debug(LoggingLevel.DEBUG, '*****Vend_Sync_Object::SyncVendObject_Future ' + vendApiType.name() + ' insert count: ' + insertProducts.size());
+                    System.debug(LoggingLevel.DEBUG, '*****Vend_Sync_Object::execute ' + this.vendApiType.name() + ' insert count: ' + insertProducts.size());
                     Database.SaveResult[] saveResults = Database.insert(insertProducts.values(), false);
                     for (Database.SaveResult result : saveResults) {
                         if (!result.isSuccess()) {
-                            Vend_Sync_SharedCode.SendAdminAlert(LoggingLevel.ERROR, Vend_Sync_SharedCode.ADMIN_TYPE, '*****Vend_Sync_Object::SyncVendObject_Future Insert ' + result.getErrors());
+                            Vend_Sync_SharedCode.SendAdminAlert(LoggingLevel.ERROR, Vend_Sync_SharedCode.ADMIN_TYPE, '*****Vend_Sync_Object::execute Insert ' + result.getErrors());
                             break;
                         }
                     }
@@ -298,11 +301,11 @@ global class Vend_Sync_Object {
 
                 if (!updateSales.isEmpty()) {
 
-                    System.debug(LoggingLevel.DEBUG, '*****Vend_Sync_Object::SyncVendObject_Future ' + vendApiType.name() + ' update count: ' + updateSales.size());
+                    System.debug(LoggingLevel.DEBUG, '*****Vend_Sync_Object::execute ' + this.vendApiType.name() + ' update count: ' + updateSales.size());
                     Database.SaveResult[] saveResults = Database.update(updateSales.values(), false);
                     for (Database.SaveResult result : saveResults) {
                         if (!result.isSuccess()) {
-                            Vend_Sync_SharedCode.SendAdminAlert(LoggingLevel.ERROR, Vend_Sync_SharedCode.ADMIN_TYPE, '*****Vend_Sync_Object::SyncVendObject_Future Update ' + result.getErrors());
+                            Vend_Sync_SharedCode.SendAdminAlert(LoggingLevel.ERROR, Vend_Sync_SharedCode.ADMIN_TYPE, '*****Vend_Sync_Object::execute Update ' + result.getErrors());
                             break;
                         }
                     }
@@ -310,11 +313,11 @@ global class Vend_Sync_Object {
         
                 if (!insertSales.isEmpty()) {  
 
-                    System.debug(LoggingLevel.DEBUG, '*****Vend_Sync_Object::SyncVendObject_Future ' + vendApiType.name() + ' insert count: ' + insertSales.size());
+                    System.debug(LoggingLevel.DEBUG, '*****Vend_Sync_Object::execute ' + this.vendApiType.name() + ' insert count: ' + insertSales.size());
                     Database.SaveResult[] saveResults = Database.insert(insertSales.values(), false);
                     for (Database.SaveResult result : saveResults) {
                         if (!result.isSuccess()) {
-                            Vend_Sync_SharedCode.SendAdminAlert(LoggingLevel.ERROR, Vend_Sync_SharedCode.ADMIN_TYPE, '*****Vend_Sync_Object::SyncVendObject_Future Insert ' + result.getErrors());
+                            Vend_Sync_SharedCode.SendAdminAlert(LoggingLevel.ERROR, Vend_Sync_SharedCode.ADMIN_TYPE, '*****Vend_Sync_Object::execute Insert ' + result.getErrors());
                             break;
                         }
                     }
@@ -324,6 +327,9 @@ global class Vend_Sync_Object {
                 Vend_Sync_Object.ProcessSaleLineItems(vendSaleLineItems, updateSales, insertSales);
             }
         }
+
+        // Flush Queues
+        Vend_Sync_SharedCode.FlushAllQueues();
     }
 
     private static void ProcessSaleLineItems(Map<String, List<Object>> vendSaleLineItems, Map<String, Vend_Sale__c> updateSales, Map<String, Vend_Sale__c> insertSales) {
@@ -331,12 +337,15 @@ global class Vend_Sync_Object {
 		List<Vend_Sale_Line_Item__c> insertSaleLineItems = new List<Vend_Sale_Line_Item__c>();
 
         Set<String> vendSaleLineItemIds = new Set<String>();
+        System.debug('****Vend_Sync_Object:ProcessSaleLineItems - SOQL Query: SELECT id__c FROM Vend_Sale_Line_Item__c');
         for (Vend_Sale_Line_Item__c vendSaleLineItem :[SELECT id__c FROM Vend_Sale_Line_Item__c]) {
             vendSaleLineItemIds.add(vendSaleLineItem.id__c);
         }
 
-        for (String vendSaleId :vendSaleLineItems.keySet()) {
+        Boolean singleInfoWritten = false;
 
+        for (String vendSaleId :vendSaleLineItems.keySet()) {
+   
             String vendSaleSalesforceId = '';
             if (updateSales.containsKey(vendSaleId)) {
                 vendSaleSalesforceId = updateSales.get(vendSaleId).Id;
@@ -352,6 +361,12 @@ global class Vend_Sync_Object {
             for (Object vendObject :vendSaleLineItems.get(vendSaleId)) {
             
                 String JSONData = JSON.serialize(vendObject);
+
+                if (!singleInfoWritten) {
+                    singleInfoWritten = true;
+                    Vend_Sync_SharedCode.SendAdminAlert(LoggingLevel.INFO, Vend_Sync_SharedCode.ADMIN_TYPE, 'JSON Details for ProcessSaleLineItems : ' + JSONData);
+                }
+    
                 Map<String, Object> vendObjectMap = (Map<String, Object>)JSON.deserializeUntyped(JSONData);
 
 				if (vendObjectMap == null) {
@@ -395,7 +410,7 @@ global class Vend_Sync_Object {
 
         if (!insertSaleLineItems.isEmpty()) {  
 
-            System.debug(LoggingLevel.DEBUG, '*****Vend_Sync_Object::SyncVendObject_Future ProcessSaleLineItems insert count: ' + insertSaleLineItems.size());
+            System.debug(LoggingLevel.DEBUG, '*****Vend_Sync_Object::execute ProcessSaleLineItems insert count: ' + insertSaleLineItems.size());
 
             // Attempt insert and ignore errors - line items don't have an update_at field so don't know when they change.  Potentially could use the sales updated_at but for now just try to insert and
             //      let the DB block the insert if already in the DB
@@ -403,6 +418,7 @@ global class Vend_Sync_Object {
         }
     }
 
+    private static Set<String> unhandledJsonFields = new Set<String>();
     private static String GetJSONField2String(String jsonField, Object jsonFieldObject) {
 
 		if (jsonFieldObject == null) {
@@ -421,8 +437,15 @@ global class Vend_Sync_Object {
 			return String.valueOf(Double.valueOf(jsonFieldObject));
 		}
 		else {
-			String outputMessage = '*****Vend_Sync_Object::GetJSONField2String Unknown JSON Field Type for JSON Field: ' + jsonField;
-			Vend_Sync_SharedCode.SendAdminAlert(LoggingLevel.ERROR, Vend_Sync_SharedCode.ADMIN_TYPE, outputMessage);
+
+            if (Vend_Sync_Object.unhandledJsonFields.contains(jsonField)) {
+                return null;
+            }
+
+			String outputMessage = '*****Vend_Sync_Object::GetJSONField2String Unknown JSON Field Type for JSON Field: ' + jsonField + ' jsonFieldObject: ' + jsonFieldObject;
+            Vend_Sync_SharedCode.SendAdminAlert(LoggingLevel.ERROR, Vend_Sync_SharedCode.ADMIN_TYPE, outputMessage);
+            
+            Vend_Sync_Object.unhandledJsonFields.add(jsonField);
 		}
 
 		return null;

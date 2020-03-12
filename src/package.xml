@@ -15,6 +15,9 @@
         <members>Vend_Customer__c.Record_Reconciled__c</members>
         <members>Vend_Customer__c.id__c</members>
         <members>Vend_Customer__c.updated_at__c</members>
+        <members>Vend_Debug_Log__c.Logging_Level__c</members>
+        <members>Vend_Debug_Log__c.Message_Verbose__c</members>
+        <members>Vend_Debug_Log__c.Message__c</members>
         <members>Vend_Product__c.Record_Reconciled__c</members>
         <members>Vend_Product__c.id__c</members>
         <members>Vend_Product__c.updated_at__c</members>
@@ -28,6 +31,7 @@
     </types>
     <types>
         <members>Vend_Customer__c</members>
+        <members>Vend_Debug_Log__c</members>
         <members>Vend_Product__c</members>
         <members>Vend_Sale_Line_Item__c</members>
         <members>Vend_Sale__c</members>

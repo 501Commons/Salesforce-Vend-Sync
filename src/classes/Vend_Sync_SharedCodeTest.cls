@@ -31,17 +31,6 @@ public with sharing class Vend_Sync_SharedCodeTest {
 				Email = 'test@test.com'
 			);
 			insert contact;
-
-			Messaging.SingleEmailMessage contactEmail = Vend_Sync_SharedCode.BuildContactEmail(template.Id, contact.Id, account.Id, contact.Email, new List<OrgWideEmailAddress>());
-			Messaging.SingleEmailMessage contactEmail2 = Vend_Sync_SharedCode.BuildContactEmail_v2(template.Id, contact.Id, account.Id, contact.Email, new List<OrgWideEmailAddress>(), false);
-			Messaging.SingleEmailMessage adminEmail = Vend_Sync_SharedCode.BuildAdminEmail(contact.Id, contact.Email, contact.Email, template.Name, 'Message Data', 'Error Message', true);
-
-			Vend_Sync_SharedCode.SendEmails(
-				new List<Messaging.SingleEmailMessage> {adminEmail, contactEmail, contactEmail2},
-				contact.Email,
-				template.DeveloperName,
-				'Message Data',
-				true);
 		}
 
 		Vend_Sync_SharedCode.NearSalesforceLimits(true);

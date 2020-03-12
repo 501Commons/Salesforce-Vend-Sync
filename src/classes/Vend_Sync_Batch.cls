@@ -59,8 +59,19 @@ public with sharing class Vend_Sync_Batch {
     @InvocableMethod(label='Vend Sync Batch' description='Vend Sync data from Vend REST API into Salesforce.')
     public static void vendSyncBatch() {
 
-      Vend_Sync_Object.SyncVendObject_Future(Vend_Sync_Object.VendApiTypes.customers.name());
-      Vend_Sync_Object.SyncVendObject_Future(Vend_Sync_Object.VendApiTypes.products.name());
-      Vend_Sync_Object.SyncVendObject_Future(Vend_Sync_Object.VendApiTypes.sales.name());
+      Vend_Sync_Object syncCustomerRecords = new Vend_Sync_Object();
+      syncCustomerRecords.vendApiType = Vend_Sync_Object.VendApiTypes.customers;
+      ID jobIdCustomers = System.enqueueJob(syncCustomerRecords);
+      System.debug(LoggingLevel.DEBUG, '****Vend_Sync_Batch:vendSyncBatch Customers jobId: ' + jobIdCustomers);
+
+      Vend_Sync_Object syncProductRecords = new Vend_Sync_Object();
+      syncProductRecords.vendApiType = Vend_Sync_Object.VendApiTypes.products;
+      ID jobIdProducts = System.enqueueJob(syncProductRecords);
+      System.debug(LoggingLevel.DEBUG, '****Vend_Sync_Batch:vendSyncBatch Products jobId: ' + jobIdProducts);
+    
+      Vend_Sync_Object syncSaleRecords = new Vend_Sync_Object();
+      syncSaleRecords.vendApiType = Vend_Sync_Object.VendApiTypes.sales;
+      ID jobIdSales = System.enqueueJob(syncSaleRecords);
+      System.debug(LoggingLevel.DEBUG, '****Vend_Sync_Batch:vendSyncBatch Sales jobId: ' + jobIdSales);
     }
 }

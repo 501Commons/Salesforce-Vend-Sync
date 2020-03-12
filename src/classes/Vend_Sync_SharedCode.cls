@@ -1,5 +1,6 @@
 global with sharing class Vend_Sync_SharedCode {
 
+    public static List<Vend_Debug_Log__c> InsertQueue_VendDebugLogs = new List<Vend_Debug_Log__c>();
     public static final String ADMIN_NOTIFICATION_SUBJECT = 'Vend Sync Salesforce Admin Notification';
     public static final String ADMIN_TYPE = 'Salesforce Admin';
     public static final Integer QUERYEXCEPTION_MAXRETRY = 12;
@@ -10,6 +11,7 @@ global with sharing class Vend_Sync_SharedCode {
         get {
             if (!fCheckedIsSandbox) {
                 IsSandbox = true;
+                System.debug('****Vend_Sync_SharedCode:IsSandbox - SOQL Query: SELECT IsSandbox FROM Organization LIMIT 1');
                 List<Organization> organizations = [SELECT IsSandbox FROM Organization LIMIT 1];
                 if (!organizations.isEmpty()) {
                     IsSandbox = Boolean.valueOf(organizations[0].IsSandbox);
@@ -34,236 +36,59 @@ global with sharing class Vend_Sync_SharedCode {
         return Datetime.valueOf(vendJsonDatetime.replace('T', ' ').removeEnd('+00:00'));
     }
 
+    public static Integer GetMaximumDMLLimitSize() {
+
+        Integer percentageMultiple = 98;
+        Integer maximumLimitSize = ((Limits.getLimitQueryRows() - Limits.getQueryRows()) / 100) * percentageMultiple;
+        Integer maximumDMLLimitSize = ((Limits.getLimitDMLRows() - Limits.getDMLRows()) / 100) * percentageMultiple;
+
+
+        return maximumDMLLimitSize < maximumLimitSize ? maximumDMLLimitSize : maximumLimitSize;
+    }
+
+    public static void CheckDebugLog() {
+
+        // Clear out logs > 24 hours
+        System.debug('****Vend_Sync_SharedCode:IsSandbox - SOQL Query: SELECT Id FROM Vend_Debug_Log__c WHERE isDeleted = false AND CreatedDate < TODAY LIMIT ' + GetMaximumDMLLimitSize());
+        List<Vend_Debug_Log__c> deleteDebugLogs = [SELECT Id FROM Vend_Debug_Log__c WHERE isDeleted = false AND CreatedDate < TODAY LIMIT :GetMaximumDMLLimitSize()];
+        if (!deleteDebugLogs.isEmpty()) {
+            Database.delete(deleteDebugLogs, false);
+        }
+    }
+
+    public static void FlushAllQueues() {
+
+        if (!Vend_Sync_SharedCode.InsertQueue_VendDebugLogs.isEmpty()) {
+
+            System.debug('****Vend_Sync_SharedCode:FlushAllQueues - InsertQueue_VendDebugLogs size: ' + Vend_Sync_SharedCode.InsertQueue_VendDebugLogs.size());
+            Database.insert(Vend_Sync_SharedCode.InsertQueue_VendDebugLogs, false);
+            Vend_Sync_SharedCode.InsertQueue_VendDebugLogs.clear();
+        }
+    }
     public static void SendAdminAlert(LoggingLevel logLevel, String adminType, String message){
 
         // Output Debugger
 		System.debug(logLevel, message);
 
-        List<EmailMessage> adminEmailMessages = [SELECT CreatedDate FROM EmailMessage WHERE Subject = :ADMIN_NOTIFICATION_SUBJECT ORDER BY CreatedDate DESC LIMIT 1];
-        if (!adminEmailMessages.isEmpty()) {
-
-            // Check to only send up to 1 per day interval
-            DateTime checkDateTime = Datetime.now().addDays(-1);
-            if (adminEmailMessages[0].CreatedDate > checkDateTime) {
-                return;
-            }
-        }
-
-        EmailMessage adminEmail = new EmailMessage(
-            Subject = Vend_Sync_SharedCode.ADMIN_NOTIFICATION_SUBJECT,
-            Status = '3'
-        );
-        Database.insert(adminEmail, false);
-
-        // Ignore sending email for UNABLE_TO_LOCK_ROW because scheduled action will retry again
-        if (message.contains('UNABLE_TO_LOCK_ROW')) {
+        if (Test.isRunningTest()) {
             return;
         }
 
-        // Output Email Message
-        if (Limits.getEmailInvocations() >= Limits.getLimitEmailInvocations()) {
-            System.debug(logLevel, '*****Vend_Sync_SharedCode::SendAdminAlert - Disabled sending emails since limit reached: ' + Limits.getLimitEmailInvocations());
-            return;
+        Vend_Sync_SharedCode.CheckDebugLog();
+
+        if (message.length() <= 255) {
+            Vend_Sync_SharedCode.InsertQueue_VendDebugLogs.add(
+                new Vend_Debug_Log__c(
+                    Logging_Level__c = logLevel.name(),
+                    Message__c = message));
         }
-
-        String orgEmail = 'sfconsulting@501commons.org';
-
-        List<OrgWideEmailAddress> orgEmails = [select id, DisplayName, Address from OrgWideEmailAddress where DisplayName = :adminType];
-        if (!orgEmails.isEmpty()) {
-            orgEmail = orgEmails[0].Address;
+        else {
+            Vend_Sync_SharedCode.InsertQueue_VendDebugLogs.add(
+                new Vend_Debug_Log__c(
+                    Logging_Level__c = logLevel.name(),
+                    Message__c = message.left(250) + '...',
+                    Message_Verbose__c = message));
         }
-        
-        try {
-            Messaging.SingleEmailMessage adminMail = Vend_Sync_SharedCode.BuildAdminEmail(null, null, orgEmail, null, null, message, Vend_Sync_SharedCode.isSandbox);
-            if (adminMail != null) {
-                Vend_Sync_SharedCode.SendEmails(new Messaging.SingleEmailMessage[] { adminMail }, orgEmail, null, null, Vend_Sync_SharedCode.isSandbox);
-            }
-        }
-        catch (Exception e) {
-            System.debug(logLevel, '*****Vend_Sync_SharedCode::SendAdminAlert Exception Sending Email: ' + Vend_Sync_SharedCode.GetExceptionMessage(e));
-        }
-    }
-
-    public static Boolean SendEmails(List<Messaging.SingleEmailMessage> emails, String adminEmail, String emailTemplate, String messageData) {
-
-        return Vend_Sync_SharedCode.SendEmails(emails, adminEmail, emailTemplate, messageData, Vend_Sync_SharedCode.isSandbox);
-    }
-
-    public static Boolean SendEmails(List<Messaging.SingleEmailMessage> emails, String adminEmail, String emailTemplate, String messageData, Boolean isSandbox) {
-
-        if (emails.isEmpty()) {
-            return false;
-        }
-
-        if (Limits.getEmailInvocations() >= Limits.getLimitEmailInvocations()) {
-            System.debug(LoggingLevel.DEBUG, '*****Vend_Sync_SharedCode::SendEmails - Disabled sending emails since limit reached: ' + Limits.getLimitEmailInvocations());
-            return false;
-        }
-
-        // Salesforce Limit is 10 but set to 5 just to be safe.  This is in a sync process so can be safe and take a bit longer
-        Integer maxEmailsPerSend = 5;
-
-        Messaging.reserveSingleEmailCapacity(2);
-        List<Messaging.SingleEmailMessage> adminEmails = new List<Messaging.SingleEmailMessage>();
-        List<Messaging.SingleEmailMessage> emailSendQueue = new List<Messaging.SingleEmailMessage>();
-
-        try {
-            // Send in batches of 10 which is the limit for Messaging.sendEmail
-            List<Messaging.SendEmailResult> results = new List<Messaging.SendEmailResult>();
-            for (Messaging.SingleEmailMessage emailMessage :emails) {
-
-/*
-                // Check to override email unless allowed domain
-                if (Vend_Sync_SharedCode.IsSandbox) {
-                    for (String emailAddress :emailMessage.getToAddresses()) {
-                        if (!emailAddress.toLowerCase().contains('501commons.org')) {
-
-                            Messaging.SingleEmailMessage adminMail = Vend_Sync_SharedCode.BuildAdminEmail(null, emailAddress, adminEmail, emailTemplate, messageData, 'WARNING: Email to ' + emailAddress + ' disabled in Sandbox.', Vend_Sync_SharedCode.isSandbox);
-                            if (adminMail != null) {
-                                adminEmails.add(adminMail);
-
-                                continue;
-                            }
-                        }
-                    }
-                }
-*/
-                emailSendQueue.add(emailMessage);
-
-                if (emailSendQueue.size() == maxEmailsPerSend) {
-                    results.addAll(Messaging.sendEmail(emailSendQueue, false));
-                    emailSendQueue.clear();
-                }
-                else if (emailSendQueue.size() > maxEmailsPerSend) {
-                    Messaging.SingleEmailMessage adminMail = Vend_Sync_SharedCode.BuildAdminEmail(null, adminEmail, adminEmail, emailTemplate, messageData, 'Error SendEmail Loop: send email queue size should never exceed 10 Actual: ' + String.valueOf(emailSendQueue.size()), Vend_Sync_SharedCode.isSandbox);
-                    if (adminMail != null) {
-                        adminEmails.add(adminMail);
-                    }
-                }
-            }
-
-            if (emailSendQueue.size() > 0 && emailSendQueue.size() <= maxEmailsPerSend) {
-                results.addAll(Messaging.sendEmail(emailSendQueue, false));
-                emailSendQueue.clear();
-            }
-            else if (emailSendQueue.size() > maxEmailsPerSend) {
-                Messaging.SingleEmailMessage adminMail = Vend_Sync_SharedCode.BuildAdminEmail(null, adminEmail, adminEmail, emailTemplate, messageData, 'Error SendEmail Overflow: send email queue size should never exceed 10 Actual: ' + String.valueOf(emailSendQueue.size()), Vend_Sync_SharedCode.isSandbox);
-                if (adminMail != null) {
-                    adminEmails.add(adminMail);
-                }
-            }
-
-            if (results.isEmpty()) {
-                Messaging.SingleEmailMessage adminMail = Vend_Sync_SharedCode.BuildAdminEmail(null, adminEmail, adminEmail, emailTemplate, messageData, 'Error: Send Mail Missing Results' + ' target emails: ' + String.valueOf(emails), Vend_Sync_SharedCode.isSandbox);
-                if (adminMail != null) {
-                    adminEmails.add(adminMail);
-                }
-            }
-            else {
-                for ( Messaging.SendEmailResult result :results ) {
-                    if (!result.isSuccess()) {
-                        Messaging.SingleEmailMessage adminMail = Vend_Sync_SharedCode.BuildAdminEmail(null, adminEmail, adminEmail, emailTemplate, messageData, 'Error: Send Mail Failed - ' + String.valueOf(result.getErrors()) + ' result details: ' + String.valueOf(result), Vend_Sync_SharedCode.isSandbox);
-                        if (adminMail != null) {
-                            adminEmails.add(adminMail);
-                        }
-                    }
-                }
-            }
-        }
-        catch (System.LimitException ex) {
-            System.debug(LoggingLevel.ERROR, '*****Vend_Sync_SharedCode::SendEmails Exception: ' + Vend_Sync_SharedCode.GetExceptionMessage(ex));
-        }
-        catch (Exception e) {
-            System.debug(LoggingLevel.ERROR, '*****Vend_Sync_SharedCode::SendEmails Exception: ' + Vend_Sync_SharedCode.GetExceptionMessage(e));
-            Messaging.SingleEmailMessage adminMail = Vend_Sync_SharedCode.BuildAdminEmail(null, adminEmail, adminEmail, emailTemplate, messageData,
-                'Error: Send Mail Exception - ' + String.valueOf(e) + '\n\nStack Trace: ' + e.getStackTraceString() + ' target emails: ' + String.valueOf(emailSendQueue), Vend_Sync_SharedCode.isSandbox);
-            if (adminMail != null) {
-                adminEmails.add(adminMail);
-            }
-        }
-        
-        if (!adminEmails.isEmpty()) {
-            try {
-                // Send in batches of 10 which is the limit for Messaging.sendEmail
-                emailSendQueue.clear();
-                for (Messaging.SingleEmailMessage emailMessage :adminEmails) {
-
-                    emailSendQueue.add(emailMessage);
-                    if (emailSendQueue.size() == maxEmailsPerSend) {
-                        Messaging.sendEmail(emailSendQueue, false);
-                        emailSendQueue.clear();
-                    }
-                    else if (emailSendQueue.size() > maxEmailsPerSend) {
-                        throw new InvalidParameterValueException('Error SendEmail - Admin Loop: send email queue size should never exceed 10');
-                    }
-                }
-
-                if (emailSendQueue.size() > 0 && emailSendQueue.size() <= maxEmailsPerSend) {
-                    Messaging.sendEmail(emailSendQueue, false);
-                    emailSendQueue.clear();
-                }
-                else if (emailSendQueue.size() > maxEmailsPerSend) {
-                    throw new InvalidParameterValueException('Error SendEmail - Admin Overflow: send email queue size should never exceed 10');
-                }
-
-            }
-            catch (System.LimitException ex) {
-                System.debug(LoggingLevel.DEBUG, '*****Vend_Sync_SharedCode::SendEmail Exception: ' + Vend_Sync_SharedCode.GetExceptionMessage(ex));
-            }       
-            catch (Exception e) {
-                System.debug(LoggingLevel.DEBUG, '*****Vend_Sync_SharedCode::SendEmail Exception: ' + Vend_Sync_SharedCode.GetExceptionMessage(e));
-                throw new InvalidParameterValueException('*****Vend_Sync_SharedCode::SendEmail Exception: ' + Vend_Sync_SharedCode.GetExceptionMessage(e));
-            }
-
-            return false;
-        }
-
-        return true;
-    }
-
-    public static Messaging.SingleEmailMessage BuildAdminEmail(Id contactId, String email, String adminEmail, String emailTemplate, String messageData, String errorMessage, Boolean isSandbox) {
-
-        Messaging.SingleEmailMessage mail = new Messaging.SingleEmailMessage();
-
-        // Set common parameters
-        mail.setUseSignature(false);
-        mail.setBccSender(false);
-
-        List<String> emails = new List<string>{ adminEmail <> null ? adminEmail : '' };
-
-        // Debugging - clear out list to limit emails when debugging
-//        if (Vend_Sync_SharedCode.IsSandbox) {
-//            emails.clear();
-//        }
-
-        // Add 501 Commons BFF Email
-        if (!emails.contains('db.bff@501commons.org')) {
-            emails.add('db.bff@501commons.org');
-        }
-
-        mail.setToAddresses(emails);
-
-        mail.setSubject(Vend_Sync_SharedCode.ADMIN_NOTIFICATION_SUBJECT);
-
-        String expandedMessage = Vend_Sync_SharedCode.ExpandMessage(errorMessage);
-
-        mail.setPlainTextBody(
-            (String.isBlank(expandedMessage) ? '' : expandedMessage + '\n\n') +
-            (String.isBlank(contactId) ? '' : 'ContactId: ' + contactId + '\n\n') + 
-            (String.isBlank(email) ? '' : 'Email: ' + email + '\n\n') + 
-            (String.isBlank(emailTemplate) ? '' : 'Template: ' + emailTemplate + '\n\n') + 
-            (String.isBlank(messageData) ? '' : 'Message Data: ' + messageData + '\n\n') +
-            (String.isBlank(errorMessage) ? '' : 'Error Message: ' + errorMessage));
-
-        mail.setHtmlBody(
-            (String.isBlank(expandedMessage) ? '' : expandedMessage + '<br/><br/>') + 
-            (String.isBlank(contactId) ? '' : 'ContactId: ' + contactId + '<br/><br/>') + 
-            (String.isBlank(email) ? '' : 'Email: ' + email + '<br/><br/>') + 
-            (String.isBlank(emailTemplate) ? '' : 'Template: ' + emailTemplate + '<br/><br/>') + 
-            (String.isBlank(messageData) ? '' : 'Message Data:<b> ' + messageData + ' </b><p><br/><br/>') +
-            (String.isBlank(errorMessage) ? '' : 'Error Message: ' + errorMessage)); 
-
-        return mail;
     }
 
     public static String GetExceptionMessage(Exception e) {
